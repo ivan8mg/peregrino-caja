@@ -303,7 +303,7 @@
       delete nuevo._n;
       cambios.push([p, nuevo.existencia]);
       writes.push(["productos", nuevo]);
-      writes.push(["movimientos", { id: uid(), codigo: l.codigo, cantidad: -l.cantidad, motivo: "venta", ventaId: venta.id, fecha, dispositivo: S.meta.dispositivo }]);
+      writes.push(["movimientos", { id: uid(), codigo: l.codigo, cantidad: -l.cantidad, motivo: "venta", ventaId: venta.id, fecha, dispositivo: S.meta.dispositivo, sincronizado: false }]);
     }
     try {
       await DB.write(writes);
@@ -315,6 +315,7 @@
     S.meta.folio = folio;
     S.ventas.unshift(venta);
     limpiarVenta();
+    programarSync();
     $("#ticket").classList.remove("open");
     hoja(`<div class="done-mark" aria-hidden="true">✓</div>
       <h3 id="sheet-title">Venta ${folioTxt(venta)} registrada</h3>
@@ -324,7 +325,7 @@
     $("#btn-nueva").focus();
   }
 
-  const folioTxt = (v) => "#" + String(v.folio).padStart(4, "0");
+  const folioTxt = (v) => (v.dispositivo || "").split("-")[0] + "-" + String(v.folio).padStart(4, "0");
 
   function limpiarVenta() {
     S.carrito = []; S.desc.valor = 0; S.recibido = null; S.cliente = "";
@@ -369,8 +370,9 @@
       if (guardar) {
         if (!cod) cod = "L" + Date.now().toString().slice(-8);
         if (S.porCodigo.has(cod)) { toast(`El código ${cod} ya existe.`); return; }
-        const p = { codigo: cod, titulo, autor: "", precio, existencia: 0, tipo: precio < 0 ? "descuento" : (/^97\d{11}$/.test(cod) ? "libro" : "articulo"), sinDescuento: false, actualizado: now() };
+        const p = { codigo: cod, titulo, autor: "", precio, existencia: 0, tipo: precio < 0 ? "descuento" : (/^97\d{11}$/.test(cod) ? "libro" : "articulo"), sinDescuento: false, actualizado: now(), pendiente: true };
         await DB.write([["productos", p]]);
+        programarSync();
         S.productos.push(p); indexar();
         cerrarHoja(); agregar(p);
         toast(`Guardado en el catálogo: ${titulo}`);
@@ -435,12 +437,13 @@
       const np = { ...p, existencia: p.existencia + l.cantidad, actualizado: fecha };
       delete np._n;
       cambios.push([p, np.existencia]);
-      writes.push(["productos", np], ["movimientos", { id: uid(), codigo: l.codigo, cantidad: l.cantidad, motivo: "anulación", ventaId: v.id, fecha, dispositivo: S.meta.dispositivo }]);
+      writes.push(["productos", np], ["movimientos", { id: uid(), codigo: l.codigo, cantidad: l.cantidad, motivo: "anulación", ventaId: v.id, fecha, dispositivo: S.meta.dispositivo, sincronizado: false }]);
     }
     await DB.write(writes);
     cambios.forEach(([p, ex]) => (p.existencia = ex));
     Object.assign(v, nv);
     renderVentas();
+    programarSync();
     toast(`Venta ${folioTxt(v)} anulada`);
   }
 
@@ -492,11 +495,170 @@
         for (const s of Object.keys(STORES)) (data[s] || []).forEach((o) => writes.push([s, o]));
         await DB.write(writes, Object.keys(STORES));
         cerrarHoja();
-        await cargar(); render(); renderMas();
+        await cargar(); render(); renderMas(); renderSyncPanel(); estadoSync();
         $("#mas-msg").textContent = "Respaldo restaurado.";
       });
     };
     fr.readAsText(file);
+  }
+
+
+  // ---------- Sincronización con Google Sheets ----------
+  // La app manda ventas y movimientos pendientes; la hoja devuelve precios y existencias de todos los equipos.
+  let syncEnCurso = false, syncOtraVez = false, syncTimer, syncError = "";
+  const sinFlags = ({ _n, pendiente, ...p }) => p;
+
+  function programarSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => sincronizar(), 1500); estadoSync(); }
+
+  async function pendientes() {
+    const movs = (await DB.getAll("movimientos")).filter((m) => !m.sincronizado);
+    const ventas = S.ventas.filter((v) => !v.sincronizado);
+    return { movs, ventas, productos: S.productos.filter((p) => p.pendiente) };
+  }
+
+  async function estadoSync(texto) {
+    const n = $("#net");
+    const cfg = S.meta.sync;
+    n.classList.remove("off");
+    if (!cfg || !cfg.url) {
+      n.classList.toggle("off", !navigator.onLine);
+      n.textContent = navigator.onLine ? "Guardado en este equipo" : "Sin internet · se guarda igual";
+      n.title = "Todo se guarda en este equipo";
+      return;
+    }
+    const pend = S.ventas.filter((v) => !v.sincronizado).length;
+    if (texto) { n.textContent = texto; return; }
+    if (!navigator.onLine) { n.classList.add("off"); n.textContent = pend ? `Sin internet · ${pend} por subir` : "Sin internet · se guarda igual"; return; }
+    if (syncError) { n.classList.add("off"); n.textContent = "No se pudo sincronizar"; n.title = syncError; return; }
+    n.title = "Sincronizado con Google Sheets";
+    n.textContent = pend ? `${pend} por subir` : S.meta.ultimaSync ? `Sincronizado ${hora(S.meta.ultimaSync)}` : "Conectado";
+  }
+
+  async function sincronizar(manual = false) {
+    const cfg = S.meta.sync;
+    if (!cfg || !cfg.url) return false;
+    if (!navigator.onLine) { estadoSync(); return false; }
+    if (syncEnCurso) { syncOtraVez = true; return false; }
+    syncEnCurso = true;
+    estadoSync("Sincronizando…");
+    let ok = false;
+    try {
+      const { movs, ventas, productos } = await pendientes();
+      const enviadas = new Map(ventas.map((v) => [v.id, v.estado]));
+      const req = {
+        clave: cfg.clave, dispositivo: S.meta.dispositivo, desde: S.meta.ultimaSync || "", hashProductos: S.meta.hashProductos || "",
+        ventas: ventas.map(({ sincronizado, ...v }) => v), movimientos: movs.map(({ sincronizado, ...m }) => m), productos: productos.map(sinFlags),
+      };
+      if (!S.meta.ultimaSync) {
+        // Primer equipo en conectarse: la hoja arranca con este catálogo (existencia antes de las ventas pendientes, que se aplican aparte).
+        const delta = new Map();
+        movs.forEach((m) => delta.set(m.codigo, (delta.get(m.codigo) || 0) + m.cantidad));
+        req.catalogo = S.productos.map((p) => ({ ...sinFlags(p), existencia: p.existencia - (delta.get(p.codigo) || 0) }));
+      }
+      const resp = await fetch(cfg.url, { method: "POST", body: JSON.stringify(req), headers: { "Content-Type": "text/plain;charset=utf-8" } });
+      let r;
+      try { r = await resp.json(); } catch (e) { throw new Error("La dirección no es la de tu hoja de Peregrino. Revisa que copiaste la URL de la aplicación web."); }
+      if (!r.ok) throw new Error(r.error === "clave" ? "La clave no coincide con la que pusiste en el script de la hoja." : "La hoja respondió con un error.");
+
+      const writes = [];
+      const ackV = new Set(r.ventasAceptadas || []);
+      for (const v of S.ventas) if (ackV.has(v.id) && enviadas.get(v.id) === v.estado && !v.sincronizado) { v.sincronizado = true; writes.push(["ventas", v]); }
+      const ackM = new Set(r.movimientos || []);
+      for (const m of movs) if (ackM.has(m.id)) writes.push(["movimientos", { ...m, sincronizado: true }]);
+      const enviados = new Set(productos.map((p) => p.codigo));
+      for (const p of S.productos) if (p.pendiente && enviados.has(p.codigo)) { p.pendiente = false; writes.push(["productos", sinFlags(p)]); }
+      for (const sv of r.ventas || []) {
+        const local = S.ventas.find((v) => v.id === sv.id);
+        if (!local) { const nv = { ...sv, sincronizado: true }; S.ventas.push(nv); writes.push(["ventas", nv]); }
+        else if (local.sincronizado && local.estado !== sv.estado) { Object.assign(local, { estado: sv.estado, anuladaEn: sv.anuladaEn }); writes.push(["ventas", local]); }
+      }
+      S.meta.ultimaSync = r.ahora; S.meta.hashProductos = r.hashProductos;
+      writes.push(["meta", { clave: "ultimaSync", valor: r.ahora }], ["meta", { clave: "hashProductos", valor: r.hashProductos }]);
+      await DB.write(writes);
+
+      if (Array.isArray(r.productos)) {
+        // Existencia de la hoja + lo que este equipo vendió y aún no sube (p. ej. una venta hecha mientras se sincronizaba).
+        const delta = new Map();
+        (await DB.getAll("movimientos")).filter((m) => !m.sincronizado).forEach((m) => delta.set(m.codigo, (delta.get(m.codigo) || 0) + m.cantidad));
+        const t = now();
+        const deHoja = r.productos.map((p) => ({ ...p, existencia: p.existencia + (delta.get(p.codigo) || 0), actualizado: t }));
+        const codigos = new Set(deHoja.map((p) => p.codigo));
+        const locales = S.productos.filter((p) => p.pendiente && !codigos.has(p.codigo)).map((p) => ({ ...sinFlags(p), pendiente: true }));
+        const todos = [...deHoja, ...locales];
+        await DB.write(todos.map((p) => ["productos", p]), ["productos"]);
+        S.productos = todos;
+        indexar();
+      }
+      S.ventas.sort((a, b) => b.fecha.localeCompare(a.fecha));
+      syncError = "";
+      ok = true;
+      render();
+      if (!$("#view-ventas").hidden) renderVentas();
+      if (manual) toast("Sincronizado con Google Sheets");
+    } catch (e) {
+      syncError = e && e.message && !/fetch|network|load/i.test(e.message) ? e.message : "No hubo respuesta de Google. Se reintentará solo.";
+      if (manual) toast(syncError);
+    } finally {
+      syncEnCurso = false;
+      estadoSync();
+      if (!$("#view-mas").hidden) renderSyncPanel();
+      if (syncOtraVez) { syncOtraVez = false; programarSync(); }
+    }
+    return ok;
+  }
+
+  function renderSyncPanel() {
+    const cfg = S.meta.sync;
+    const conectado = !!(cfg && cfg.url);
+    $("#sync-form").hidden = conectado;
+    $("#sync-on").hidden = !conectado;
+    const pend = S.ventas.filter((v) => !v.sincronizado).length;
+    if (conectado) {
+      $("#sync-estado").textContent = syncError ? syncError
+        : `${S.meta.ultimaSync ? "Última sincronización: " + new Date(S.meta.ultimaSync).toLocaleString("es-MX") : "Aún no se sincroniza."}${pend ? ` · ${pend} venta(s) por subir.` : ""}`;
+    } else {
+      $("#sync-subir").hidden = !S.ventas.length;
+      $("#sync-subir-txt").textContent = `Borrar las ${S.ventas.length} venta(s) de prueba de este equipo antes de conectar`;
+    }
+  }
+
+  async function conectar() {
+    const url = $("#sync-url").value.trim();
+    const clave = $("#sync-clave").value.trim();
+    const msg = $("#sync-msg");
+    msg.textContent = "Conectando…";
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { msg.textContent = "Pega la URL de la aplicación web; empieza con https://script.google.com/"; return; }
+    if (!clave) { msg.textContent = "Escribe la clave que pusiste en el script."; return; }
+    if ($("#sync-borrar").checked && S.ventas.length) {
+      // Quita las ventas de prueba y regresa sus artículos a la existencia.
+      const movs = await DB.getAll("movimientos");
+      const delta = new Map();
+      movs.forEach((m) => delta.set(m.codigo, (delta.get(m.codigo) || 0) + m.cantidad));
+      const prods = S.productos.filter((p) => delta.has(p.codigo)).map((p) => { p.existencia -= delta.get(p.codigo); return ["productos", sinFlags(p)]; });
+      await DB.write([...prods, ["meta", { clave: "folio", valor: 0 }]], ["ventas", "movimientos"]);
+      S.ventas = []; S.meta.folio = 0;
+    }
+    S.meta.sync = { url, clave };
+    S.meta.ultimaSync = ""; S.meta.hashProductos = "";
+    await DB.write([["meta", { clave: "sync", valor: S.meta.sync }], ["meta", { clave: "ultimaSync", valor: "" }], ["meta", { clave: "hashProductos", valor: "" }]]);
+    const ok = await sincronizar(true);
+    msg.textContent = "";
+    if (!ok) {
+      S.meta.sync = null;
+      await DB.write([["meta", { clave: "sync", valor: null }]]);
+      msg.textContent = syncError;
+      syncError = "";
+      estadoSync();
+    }
+    renderSyncPanel(); renderMas();
+  }
+
+  async function desconectar() {
+    S.meta.sync = null;
+    await DB.write([["meta", { clave: "sync", valor: null }]]);
+    syncError = "";
+    renderSyncPanel(); estadoSync();
+    toast("Este equipo ya no se sincroniza");
   }
 
   // ---------- Navegación ----------
@@ -506,16 +668,10 @@
       $(`#tab-${n}`).classList.toggle("is-active", n === v);
     }
     if (v === "ventas") renderVentas();
-    if (v === "mas") renderMas();
+    if (v === "mas") { renderMas(); renderSyncPanel(); }
     if (v === "vender" && !isMobile()) $("#q").focus();
   }
 
-  function red() {
-    const on = navigator.onLine;
-    const n = $("#net");
-    n.classList.toggle("off", !on);
-    n.textContent = on ? "Guardado en este equipo" : "Sin internet · se guarda igual";
-  }
 
   // ---------- Eventos ----------
   function eventos() {
@@ -597,16 +753,23 @@
       if (e.key === "F2") { e.preventDefault(); vista("vender"); $("#q").focus(); $("#q").select(); }
       if (e.key === "F9") { e.preventDefault(); cobrar(); }
     });
-    addEventListener("online", red);
-    addEventListener("offline", red);
+    addEventListener("online", () => sincronizar());
+    addEventListener("offline", () => estadoSync());
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") sincronizar(); });
+    setInterval(() => { if (document.visibilityState === "visible") sincronizar(); }, 3 * 60 * 1000);
+    $("#btn-conectar").addEventListener("click", conectar);
+    $("#btn-sync-ahora").addEventListener("click", () => sincronizar(true));
+    $("#btn-desconectar").addEventListener("click", desconectar);
   }
 
   async function iniciar() {
     $("#fecha").value = dayKey(now());
     if (isMobile()) $("#q").placeholder = "Busca título o código";
-    eventos(); red();
+    eventos();
     await cargar();
     render();
+    estadoSync();
+    sincronizar();
     if (!isMobile()) $("#q").focus();
     if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
       navigator.serviceWorker.register("sw.js").catch(() => {});

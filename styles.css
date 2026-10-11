@@ -201,6 +201,7 @@ input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px 
 .panel p { margin: 0; max-width: 65ch; }
 .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: .9rem; color: var(--muted); }
 .stats b { color: var(--ink); font-family: var(--f-mono); }
+.check { display: flex; gap: 8px; align-items: center; font-size: .9rem; color: var(--muted); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* Hoja / diálogos */

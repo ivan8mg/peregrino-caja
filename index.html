@@ -131,8 +131,23 @@
       <p class="muted" id="mas-msg" role="status"></p>
     </section>
     <section class="panel">
+      <h2>Google Sheets</h2>
+      <p>Conecta la computadora y el celular a la misma hoja de Google. Cada equipo sigue vendiendo sin internet y sube sus ventas en cuanto hay conexión. Los precios y existencias que cambies en la hoja llegan a los dos equipos.</p>
+      <div id="sync-form" class="cash">
+        <div class="field-row"><label for="sync-url">URL</label><input id="sync-url" type="text" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false"></div>
+        <div class="field-row"><label for="sync-clave">Clave</label><input id="sync-clave" type="text" autocomplete="off" spellcheck="false"></div>
+        <label class="check" id="sync-subir"><input type="checkbox" id="sync-borrar"> <span id="sync-subir-txt"></span></label>
+        <div class="actions"><button class="btn primary" id="btn-conectar" type="button">Conectar</button></div>
+        <p class="muted" id="sync-msg" role="status"></p>
+      </div>
+      <div id="sync-on" class="cash" hidden>
+        <p id="sync-estado" role="status"></p>
+        <div class="actions"><button class="btn primary" id="btn-sync-ahora" type="button">Sincronizar ahora</button><button class="btn" id="btn-desconectar" type="button">Desconectar este equipo</button></div>
+      </div>
+    </section>
+    <section class="panel">
       <h2>Lo que sigue</h2>
-      <p>Inventario (entradas de mercancía y conteos), más vendidos, reportes con indicadores y sincronizar la computadora con el celular.</p>
+      <p>Inventario (entradas de mercancía y conteos), más vendidos y reportes con indicadores.</p>
     </section>
   </main>
 
