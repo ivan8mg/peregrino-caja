@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Peregrino Caja</title>
+<meta name="theme-color" content="#1d4a3e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Literata:opsz,wght@7..72,500;7..72,600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!--APP-->
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">P</span>
+      <div class="brand-text">
+        <strong>Librería Peregrino</strong>
+        <span>Punto de venta</span>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab is-active" data-view="vender" id="tab-vender">Vender</button>
+      <button class="tab" data-view="ventas" id="tab-ventas">Ventas</button>
+      <button class="tab" data-view="mas" id="tab-mas">Respaldo</button>
+    </nav>
+    <span class="net" id="net" title="Todo se guarda en este equipo">Guardado en este equipo</span>
+  </header>
+
+  <!-- VENDER -->
+  <main class="view view-vender" id="view-vender">
+    <section class="catalog" aria-label="Buscar artículos">
+      <div class="search">
+        <label for="q" class="sr">Buscar por título o código</label>
+        <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Escanea o escribe título, ISBN o código">
+        <button class="btn ghost" id="btn-libre" type="button">Artículo libre</button>
+      </div>
+      <p class="hint desk">Enter agrega el artículo · F2 buscar · F9 cobrar · Esc limpiar</p>
+      <div class="results-head">
+        <h2 id="results-title">Con existencia</h2>
+        <span id="results-count" class="muted"></span>
+      </div>
+      <ul class="results" id="results"></ul>
+    </section>
+
+    <aside class="ticket" id="ticket" aria-label="Venta actual">
+      <div class="ticket-head">
+        <h2>Venta actual</h2>
+        <div class="head-acts"><button class="link" id="btn-vaciar" type="button">Vaciar</button><button class="btn mob" id="btn-cerrar-ticket" type="button">Seguir buscando</button></div>
+      </div>
+      <ul class="lines" id="lines"></ul>
+      <div class="empty" id="empty">
+        <p>Escanea un código de barras o busca un libro para empezar.</p>
+      </div>
+
+      <div class="ticket-foot">
+        <div class="field-row">
+          <label for="cliente">Cliente</label>
+          <input id="cliente" type="text" placeholder="Opcional" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label for="desc-valor">Descuento</label>
+          <div class="desc">
+            <input id="desc-valor" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+            <div class="seg small" role="group" aria-label="Tipo de descuento">
+              <button type="button" class="is-on" data-desc="pct" id="desc-pct">%</button>
+              <button type="button" data-desc="monto" id="desc-monto">$</button>
+            </div>
+          </div>
+        </div>
+
+        <dl class="totals">
+          <div><dt>Subtotal</dt><dd id="t-sub">$0.00</dd></div>
+          <div id="row-desc" hidden><dt>Descuento</dt><dd id="t-desc">−$0.00</dd></div>
+          <div class="grand"><dt>Total</dt><dd id="t-total">$0.00</dd></div>
+        </dl>
+
+        <div class="seg pay" role="group" aria-label="Forma de pago">
+          <button type="button" class="is-on" data-pago="efectivo" id="pago-efectivo">Efectivo</button>
+          <button type="button" data-pago="transferencia" id="pago-transferencia">Transferencia</button>
+          <button type="button" data-pago="tarjeta" id="pago-tarjeta">Tarjeta</button>
+        </div>
+
+        <div class="cash" id="cash">
+          <div class="field-row">
+            <label for="recibido">Recibido</label>
+            <input id="recibido" type="number" min="0" step="any" inputmode="decimal" placeholder="Exacto">
+          </div>
+          <div class="quick" id="quick"></div>
+          <p class="change" id="change"></p>
+        </div>
+
+        <button class="btn primary big" id="btn-cobrar" type="button" disabled>Cobrar</button>
+      </div>
+    </aside>
+
+    <button class="mobile-bar" id="mobile-bar" type="button">
+      <span id="mb-items">0 artículos</span>
+      <strong id="mb-total">$0.00</strong>
+      <span class="mb-go">Ver venta</span>
+    </button>
+  </main>
+
+  <!-- VENTAS -->
+  <main class="view view-ventas" id="view-ventas" hidden>
+    <div class="ventas-head">
+      <h2>Ventas del día</h2>
+      <label for="fecha" class="sr">Fecha</label>
+      <input id="fecha" type="date">
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <ul class="sales" id="sales"></ul>
+  </main>
+
+  <!-- RESPALDO -->
+  <main class="view view-mas" id="view-mas" hidden>
+    <section class="panel">
+      <h2>Tus datos</h2>
+      <p>Todo se guarda en este navegador, aunque no haya internet. Descarga un respaldo cada semana para no perder nada si se borra el navegador o cambias de equipo.</p>
+      <div class="stats" id="stats"></div>
+      <div class="actions">
+        <button class="btn primary" id="btn-respaldo" type="button">Descargar respaldo</button>
+        <button class="btn" id="btn-csv" type="button">Ventas en Excel (CSV)</button>
+        <label class="btn" for="file-restaurar">Restaurar respaldo</label>
+        <input id="file-restaurar" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p class="muted" id="mas-msg" role="status"></p>
+    </section>
+    <section class="panel">
+      <h2>Lo que sigue</h2>
+      <p>Inventario (entradas de mercancía y conteos), más vendidos, reportes con indicadores y sincronizar la computadora con el celular.</p>
+    </section>
+  </main>
+
+  <div class="overlay" id="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" id="sheet"></div>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+<!--/APP-->
+<script src="data/catalogo-inicial.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
