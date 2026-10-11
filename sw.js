@@ -1,5 +1,5 @@
 // Guarda la app en el equipo para que abra sin internet.
-const CACHE = "peregrino-v2";
+const CACHE = "peregrino-v3";
 const ARCHIVOS = ["./", "index.html", "styles.css", "app.js", "data/catalogo-inicial.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {

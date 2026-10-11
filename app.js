@@ -344,6 +344,7 @@
   function cerrarHoja() {
     $("#overlay").hidden = true;
     $("#sheet").innerHTML = "";
+    $("#sheet").classList.remove("wide");
     const f = alCerrar; alCerrar = null;
     if (f) f();
     if (!$("#view-vender").hidden && !isMobile()) $("#q").focus();
@@ -503,6 +504,145 @@
   }
 
 
+
+  // ---------- Inventario ----------
+  S.invFiltro = "todos";
+  S.rec = []; // recepción de mercancía: { codigo, titulo, cantidad }
+
+  // Cambia existencias y deja un movimiento por artículo (se suben a la hoja al sincronizar).
+  async function moverExistencia(items, motivo) {
+    const fecha = now();
+    const writes = [];
+    for (const { p, cantidad } of items) {
+      if (!cantidad) continue;
+      const np = { ...sinFlags(p), existencia: p.existencia + cantidad, actualizado: fecha };
+      if (p.pendiente) np.pendiente = true;
+      writes.push(["productos", np], ["movimientos", { id: uid(), codigo: p.codigo, cantidad, motivo, ventaId: "", fecha, dispositivo: S.meta.dispositivo, sincronizado: false }]);
+    }
+    if (!writes.length) return;
+    await DB.write(writes);
+    for (const { p, cantidad } of items) { p.existencia += cantidad; p.actualizado = fecha; }
+    programarSync();
+  }
+
+  function renderInventario() {
+    const vendibles = S.productos.filter((p) => p.tipo !== "descuento");
+    const piezas = vendibles.reduce((a, p) => a + Math.max(0, p.existencia), 0);
+    const valor = vendibles.reduce((a, p) => a + Math.max(0, p.existencia) * p.precio, 0);
+    const pocos = vendibles.filter((p) => p.existencia > 0 && p.existencia <= 3).length;
+    const cero = vendibles.filter((p) => p.existencia <= 0).length;
+    $("#inv-kpis").innerHTML = `
+      <div class="kpi"><span>Piezas en existencia</span><strong>${piezas.toLocaleString("es-MX")}</strong><small>${vendibles.length - cero} de ${vendibles.length} artículos</small></div>
+      <div class="kpi"><span>Valor a precio de venta</span><strong>${money(valor)}</strong><small>Precio × existencia</small></div>
+      <div class="kpi"><span>Por agotarse</span><strong>${pocos}</strong><small>3 piezas o menos</small></div>
+      <div class="kpi"><span>Sin existencia</span><strong>${cero}</strong><small>Cero o negativa</small></div>`;
+    const q = $("#inv-q").value;
+    let lista = buscar(q) || [...vendibles].sort((a, b) => a.titulo.localeCompare(b.titulo, "es"));
+    if (S.invFiltro === "pocos") lista = lista.filter((p) => p.existencia > 0 && p.existencia <= 3);
+    if (S.invFiltro === "cero") lista = lista.filter((p) => p.existencia <= 0 && p.tipo !== "descuento");
+    const vis = lista.slice(0, 150);
+    $("#inv-rows").innerHTML = vis.map((p) => `<tr data-edit="${esc(p.codigo)}">
+        <td><div class="t">${esc(p.titulo)}</div><div class="c">${esc(p.codigo)}${p.autor ? " · " + esc(p.autor) : ""}${p.sinDescuento ? ' <span class="chip">No aplica descuento</span>' : ""}${p.tipo === "descuento" ? ' <span class="chip ok">Descuento</span>' : ""}</div></td>
+        <td class="n">${money(p.precio)}</td>
+        <td class="n ${p.existencia < 0 ? "ex-neg" : p.existencia === 0 ? "ex-cero" : ""}">${p.existencia}</td>
+        <td class="n">${p.existencia > 0 ? money(p.existencia * p.precio) : "—"}</td>
+        <td><button class="btn" type="button" data-edit="${esc(p.codigo)}">Editar</button></td>
+      </tr>`).join("") || `<tr><td colspan="5" class="muted">No hay artículos con ese filtro.</td></tr>`;
+    $("#inv-count").textContent = lista.length > vis.length ? `Mostrando ${vis.length} de ${lista.length}. Busca para ver los demás.` : `${lista.length} artículos`;
+  }
+
+  async function dialogoProducto(p, alGuardar, codigoNuevo = "") {
+    const nuevo = !p;
+    const movs = nuevo ? [] : (await DB.getAll("movimientos")).filter((m) => m.codigo === p.codigo).sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 12);
+    hoja(`<h3 id="sheet-title">${nuevo ? "Nuevo artículo" : "Editar artículo"}</h3>
+      <form id="f-prod" class="cash">
+        <label>Código<input type="text" id="p-codigo" value="${esc(nuevo ? codigoNuevo : p.codigo)}" ${nuevo ? "" : "readonly"} autocomplete="off" placeholder="ISBN o código interno"></label>
+        <label>Título<input type="text" id="p-titulo" value="${esc(p?.titulo || "")}" required autocomplete="off"></label>
+        <label>Autor<input type="text" id="p-autor" value="${esc(p?.autor || "")}" autocomplete="off"></label>
+        <div class="grid2">
+          <label>Precio<input type="number" id="p-precio" step="any" inputmode="decimal" value="${p ? p.precio : ""}" required></label>
+          <label>${nuevo ? "Existencia inicial" : "Existencia contada"}<input type="number" id="p-exist" step="1" inputmode="numeric" value="${p ? p.existencia : 0}"></label>
+        </div>
+        <label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="p-sindesc" ${p?.sinDescuento ? "checked" : ""}> No aplica descuento</label>
+        ${nuevo ? "" : `<div><span class="muted" style="font-size:.85rem">Movimientos en este equipo</span>
+          <ul class="hist">${movs.map((m) => `<li><span>${new Date(m.fecha).toLocaleDateString("es-MX", { day: "numeric", month: "short" })} ${hora(m.fecha)} · ${esc(m.motivo)}</span><span class="n">${m.cantidad > 0 ? "+" : ""}${m.cantidad}</span></li>`).join("") || '<li><span class="muted">Sin movimientos todavía.</span></li>'}</ul></div>`}
+        <p class="change bad" id="p-err"></p>
+        <div class="row"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="submit">Guardar</button></div>
+      </form>`);
+    $("#sheet").classList.add("wide");
+    (nuevo && !codigoNuevo ? $("#p-codigo") : $("#p-titulo")).focus();
+    $("#f-prod").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const codigo = $("#p-codigo").value.trim() || (nuevo ? "A" + Date.now().toString().slice(-8) : p.codigo);
+      const titulo = $("#p-titulo").value.trim();
+      const precio = r2(Number($("#p-precio").value));
+      const exist = Math.round(Number($("#p-exist").value) || 0);
+      if (!titulo || !isFinite(precio)) { $("#p-err").textContent = "Escribe el título y el precio."; return; }
+      if (nuevo && S.porCodigo.has(codigo)) { $("#p-err").textContent = `El código ${codigo} ya existe: ${S.porCodigo.get(codigo).titulo}.`; return; }
+      const datos = { titulo, autor: $("#p-autor").value.trim(), precio, sinDescuento: $("#p-sindesc").checked, tipo: precio < 0 ? "descuento" : (/^97\d{11}$/.test(codigo) ? "libro" : "articulo") };
+      let prod = p;
+      if (nuevo) {
+        prod = { codigo, ...datos, existencia: 0, actualizado: now(), pendiente: true };
+        await DB.write([["productos", { ...sinFlags(prod), pendiente: true }]]);
+        S.productos.push(prod);
+      } else if (["titulo", "autor", "precio", "sinDescuento", "tipo"].some((k) => (p[k] ?? "") !== datos[k])) {
+        Object.assign(p, datos, { actualizado: now(), pendiente: true });
+        await DB.write([["productos", { ...sinFlags(p), pendiente: true }]]);
+      }
+      indexar();
+      if (exist !== prod.existencia) await moverExistencia([{ p: prod, cantidad: exist - prod.existencia }], nuevo ? "alta" : "conteo");
+      else programarSync();
+      cerrarHoja();
+      toast(nuevo ? `Agregado: ${titulo}` : `Guardado: ${titulo}`);
+      renderInventario(); renderResultados();
+      if (alGuardar) alGuardar(prod);
+    });
+  }
+
+  // Recepción de mercancía
+  function recAgregar(p) {
+    const l = S.rec.find((x) => x.codigo === p.codigo);
+    if (l) l.cantidad++; else S.rec.unshift({ codigo: p.codigo, titulo: p.titulo, cantidad: 1 });
+    $("#rec-q").value = ""; $("#rec-sug").innerHTML = "";
+    renderRecepcion();
+    $("#rec-q").focus();
+  }
+
+  function renderRecepcion() {
+    $("#rec-lines").innerHTML = S.rec.map((l, i) => {
+      const ex = S.porCodigo.get(l.codigo)?.existencia || 0;
+      return `<li class="line"><span class="t">${esc(l.titulo)}</span><button type="button" class="rm" data-rrm="${i}">Quitar</button>
+        <span class="sub"><span class="qty"><button type="button" data-rdec="${i}" aria-label="Quitar uno">−</button><input type="number" min="1" step="1" inputmode="numeric" value="${l.cantidad}" data-rqty="${i}" id="rqty-${i}" aria-label="Piezas recibidas"><button type="button" data-rinc="${i}" aria-label="Agregar uno">+</button></span>
+        <span class="mono">${esc(l.codigo)}</span><span>Hay ${ex}, quedarán ${ex + l.cantidad}</span></span></li>`;
+    }).join("");
+    const piezas = S.rec.reduce((a, l) => a + l.cantidad, 0);
+    $("#rec-total").textContent = S.rec.length ? `${S.rec.length} títulos · ${piezas} piezas` : "";
+    $("#btn-rec-guardar").disabled = !S.rec.length;
+  }
+
+  function recBuscar(enter) {
+    const q = $("#rec-q").value.trim();
+    if (!q) { $("#rec-sug").innerHTML = ""; return; }
+    const exacto = S.porCodigo.get(q);
+    if (enter && exacto) return recAgregar(exacto);
+    const res = (buscar(q) || []).filter((p) => p.tipo !== "descuento");
+    if (enter && res.length === 1) return recAgregar(res[0]);
+    if (enter && !res.length && /^\d{4,}$/.test(q)) return dialogoProducto(null, (p) => recAgregar(p), q);
+    $("#rec-sug").innerHTML = res.slice(0, 8).map((p) => itemHTML(p)).join("") || `<li class="none">No encontré “${esc(q)}”.${/^\d{4,}$/.test(q) ? " Presiona Enter para darlo de alta." : ""}</li>`;
+  }
+
+  async function recGuardar() {
+    if (!S.rec.length) return;
+    const nota = $("#rec-nota").value.trim();
+    const items = S.rec.map((l) => ({ p: S.porCodigo.get(l.codigo), cantidad: l.cantidad })).filter((x) => x.p);
+    const piezas = items.reduce((a, x) => a + x.cantidad, 0);
+    await moverExistencia(items, "entrada" + (nota ? ": " + nota : ""));
+    S.rec = []; $("#rec-nota").value = "";
+    $("#recepcion").hidden = true;
+    renderRecepcion(); renderInventario(); renderResultados();
+    toast(`Entrada guardada: ${piezas} piezas`);
+  }
+
   // ---------- Sincronización con Google Sheets ----------
   // La app manda ventas y movimientos pendientes; la hoja devuelve precios y existencias de todos los equipos.
   let syncEnCurso = false, syncOtraVez = false, syncTimer, syncError = "";
@@ -545,15 +685,18 @@
     try {
       const { movs, ventas, productos } = await pendientes();
       const enviadas = new Map(ventas.map((v) => [v.id, v.estado]));
+      const deltaEnv = new Map();
+      movs.forEach((m) => deltaEnv.set(m.codigo, (deltaEnv.get(m.codigo) || 0) + m.cantidad));
+      // La hoja solo toma la existencia de artículos nuevos; se manda sin los movimientos pendientes, que se aplican aparte.
+      const base = (p) => ({ ...sinFlags(p), existencia: p.existencia - (deltaEnv.get(p.codigo) || 0) });
+      const versionEnviada = new Map(productos.map((p) => [p.codigo, p.actualizado]));
       const req = {
         clave: cfg.clave, dispositivo: S.meta.dispositivo, desde: S.meta.ultimaSync || "", hashProductos: S.meta.hashProductos || "",
-        ventas: ventas.map(({ sincronizado, ...v }) => v), movimientos: movs.map(({ sincronizado, ...m }) => m), productos: productos.map(sinFlags),
+        ventas: ventas.map(({ sincronizado, ...v }) => v), movimientos: movs.map(({ sincronizado, ...m }) => m), productos: productos.map(base),
       };
       if (!S.meta.ultimaSync) {
         // Primer equipo en conectarse: la hoja arranca con este catálogo (existencia antes de las ventas pendientes, que se aplican aparte).
-        const delta = new Map();
-        movs.forEach((m) => delta.set(m.codigo, (delta.get(m.codigo) || 0) + m.cantidad));
-        req.catalogo = S.productos.map((p) => ({ ...sinFlags(p), existencia: p.existencia - (delta.get(p.codigo) || 0) }));
+        req.catalogo = S.productos.map(base);
       }
       const resp = await fetch(cfg.url, { method: "POST", body: JSON.stringify(req), headers: { "Content-Type": "text/plain;charset=utf-8" } });
       let r;
@@ -565,8 +708,8 @@
       for (const v of S.ventas) if (ackV.has(v.id) && enviadas.get(v.id) === v.estado && !v.sincronizado) { v.sincronizado = true; writes.push(["ventas", v]); }
       const ackM = new Set(r.movimientos || []);
       for (const m of movs) if (ackM.has(m.id)) writes.push(["movimientos", { ...m, sincronizado: true }]);
-      const enviados = new Set(productos.map((p) => p.codigo));
-      for (const p of S.productos) if (p.pendiente && enviados.has(p.codigo)) { p.pendiente = false; writes.push(["productos", sinFlags(p)]); }
+      // Un artículo editado otra vez mientras se sincronizaba sigue pendiente.
+      for (const p of S.productos) if (p.pendiente && versionEnviada.get(p.codigo) === p.actualizado) { p.pendiente = false; writes.push(["productos", sinFlags(p)]); }
       for (const sv of r.ventas || []) {
         const local = S.ventas.find((v) => v.id === sv.id);
         if (!local) { const nv = { ...sv, sincronizado: true }; S.ventas.push(nv); writes.push(["ventas", nv]); }
@@ -581,7 +724,12 @@
         const delta = new Map();
         (await DB.getAll("movimientos")).filter((m) => !m.sincronizado).forEach((m) => delta.set(m.codigo, (delta.get(m.codigo) || 0) + m.cantidad));
         const t = now();
-        const deHoja = r.productos.map((p) => ({ ...p, existencia: p.existencia + (delta.get(p.codigo) || 0), actualizado: t }));
+        const pend = new Map(S.productos.filter((p) => p.pendiente).map((p) => [p.codigo, p]));
+        const deHoja = r.productos.map((p) => {
+          const loc = pend.get(p.codigo);
+          const meta = loc ? { titulo: loc.titulo, autor: loc.autor, precio: loc.precio, tipo: loc.tipo, sinDescuento: loc.sinDescuento, pendiente: true } : {};
+          return { ...p, ...meta, existencia: p.existencia + (delta.get(p.codigo) || 0), actualizado: loc ? loc.actualizado : t };
+        });
         const codigos = new Set(deHoja.map((p) => p.codigo));
         const locales = S.productos.filter((p) => p.pendiente && !codigos.has(p.codigo)).map((p) => ({ ...sinFlags(p), pendiente: true }));
         const todos = [...deHoja, ...locales];
@@ -594,6 +742,7 @@
       ok = true;
       render();
       if (!$("#view-ventas").hidden) renderVentas();
+      if (!$("#view-inventario").hidden) renderInventario();
       if (manual) toast("Sincronizado con Google Sheets");
     } catch (e) {
       syncError = e && e.message && !/fetch|network|load/i.test(e.message) ? e.message : "No hubo respuesta de Google. Se reintentará solo.";
@@ -663,11 +812,12 @@
 
   // ---------- Navegación ----------
   function vista(v) {
-    for (const n of ["vender", "ventas", "mas"]) {
+    for (const n of ["vender", "ventas", "inventario", "mas"]) {
       $(`#view-${n}`).hidden = n !== v;
       $(`#tab-${n}`).classList.toggle("is-active", n === v);
     }
     if (v === "ventas") renderVentas();
+    if (v === "inventario") renderInventario();
     if (v === "mas") { renderMas(); renderSyncPanel(); }
     if (v === "vender" && !isMobile()) $("#q").focus();
   }
@@ -743,6 +893,36 @@
       if (b) detalleVenta(b.closest(".sale"), S.ventas.find((v) => v.id === b.dataset.venta));
     });
 
+    $("#inv-q").addEventListener("input", renderInventario);
+    document.querySelectorAll("[data-filtro]").forEach((b) => b.addEventListener("click", () => {
+      S.invFiltro = b.dataset.filtro;
+      document.querySelectorAll("[data-filtro]").forEach((x) => x.classList.toggle("is-on", x === b));
+      renderInventario();
+    }));
+    $("#inv-rows").addEventListener("click", (e) => { const c = e.target.closest("[data-edit]")?.dataset.edit; if (c) dialogoProducto(S.porCodigo.get(c)); });
+    $("#btn-nuevo").addEventListener("click", () => dialogoProducto(null));
+    $("#btn-recibir").addEventListener("click", () => { $("#recepcion").hidden = false; $("#rec-q").focus(); });
+    $("#btn-rec-cancelar").addEventListener("click", () => { S.rec = []; renderRecepcion(); $("#recepcion").hidden = true; });
+    $("#rec-q").addEventListener("input", () => recBuscar(false));
+    $("#rec-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); recBuscar(true); } });
+    $("#rec-sug").addEventListener("click", (e) => { const c = e.target.closest("[data-add]")?.dataset.add; if (c) recAgregar(S.porCodigo.get(c)); });
+    $("#rec-lines").addEventListener("click", (e) => {
+      const d = e.target.closest("button")?.dataset;
+      if (!d) return;
+      if (d.rinc) S.rec[d.rinc].cantidad++;
+      else if (d.rdec) { if (S.rec[d.rdec].cantidad > 1) S.rec[d.rdec].cantidad--; else S.rec.splice(d.rdec, 1); }
+      else if (d.rrm) S.rec.splice(d.rrm, 1);
+      else return;
+      renderRecepcion();
+    });
+    $("#rec-lines").addEventListener("change", (e) => {
+      const i = e.target.dataset.rqty;
+      if (i == null) return;
+      const n = Math.floor(Number(e.target.value));
+      if (n > 0) S.rec[i].cantidad = n; else S.rec.splice(i, 1);
+      renderRecepcion();
+    });
+    $("#btn-rec-guardar").addEventListener("click", recGuardar);
     $("#btn-respaldo").addEventListener("click", respaldo);
     $("#btn-csv").addEventListener("click", csv);
     $("#file-restaurar").addEventListener("change", (e) => { if (e.target.files[0]) restaurar(e.target.files[0]); e.target.value = ""; });

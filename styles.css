@@ -196,6 +196,34 @@ input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px 
 .sale-detail .acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
 .sales .none { color: var(--muted); padding: 24px 0; text-align: center; }
 
+/* Inventario */
+.view-inventario { padding: 16px var(--gut) 32px; max-width: 1100px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.inv-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.inv-tools input { flex: 1 1 240px; width: auto; }
+.inv-tools .seg { flex: 0 1 auto; }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.inv-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.inv-table th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.inv-table td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.inv-table tr:last-child td { border-bottom: 0; }
+.inv-table tbody tr[data-edit] { cursor: pointer; }
+.inv-table tbody tr[data-edit]:hover td { background: var(--sunk); }
+.inv-tools .seg button { white-space: nowrap; }
+.inv-table .n { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.inv-table .t { font: 500 .95rem/1.25 var(--f-display); }
+.inv-table .c { font: .75rem var(--f-mono); color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.inv-table .ex-cero { color: var(--warn); }
+.inv-table .ex-neg { color: var(--danger); }
+.inv-table td:last-child { text-align: right; }
+.results.compact { grid-template-columns: 1fr; }
+.results.compact:empty { display: none; }
+.rec-lines { padding: 0; max-height: none; }
+.hist { list-style: none; margin: 0; padding: 0; font-size: .85rem; max-height: 160px; overflow-y: auto; }
+.hist li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.hist .n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.sheet.wide { width: min(520px, 100%); max-height: calc(100% - 32px); overflow-y: auto; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
 /* Respaldo */
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .panel p { margin: 0; max-width: 65ch; }
@@ -245,5 +273,11 @@ input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px 
   .mobile-bar strong { font: 500 1.15rem var(--f-mono); }
   .mobile-bar .mb-go { font-size: .85rem; opacity: .85; }
   .sale > button { grid-template-columns: auto 1fr auto; gap: 8px; }
+  .tabs { overflow-x: auto; }
+  .tab { padding-inline: 8px; }
+  .inv-table th:nth-child(4), .inv-table td:nth-child(4), .inv-table th:nth-child(5), .inv-table td:nth-child(5) { display: none; }
+  .inv-tools .seg { width: 100%; }
+  .inv-tools .seg button { padding-inline: 4px; font-size: .85rem; }
+  .inv-table td, .inv-table th { padding-inline: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { .ticket { transition: none; } }

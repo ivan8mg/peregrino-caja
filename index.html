@@ -26,6 +26,7 @@
     <nav class="tabs" aria-label="Secciones">
       <button class="tab is-active" data-view="vender" id="tab-vender">Vender</button>
       <button class="tab" data-view="ventas" id="tab-ventas">Ventas</button>
+      <button class="tab" data-view="inventario" id="tab-inventario">Inventario</button>
       <button class="tab" data-view="mas" id="tab-mas">Respaldo</button>
     </nav>
     <span class="net" id="net" title="Todo se guarda en este equipo">Guardado en este equipo</span>
@@ -116,6 +117,51 @@
     <ul class="sales" id="sales"></ul>
   </main>
 
+  <!-- INVENTARIO -->
+  <main class="view view-inventario" id="view-inventario" hidden>
+    <div class="ventas-head">
+      <h2>Inventario</h2>
+      <div class="actions">
+        <button class="btn primary" id="btn-recibir" type="button">Recibir mercancía</button>
+        <button class="btn" id="btn-nuevo" type="button">Nuevo artículo</button>
+      </div>
+    </div>
+    <div class="kpis" id="inv-kpis"></div>
+
+    <section class="panel" id="recepcion" hidden>
+      <div class="ventas-head">
+        <h2>Recibir mercancía</h2>
+        <button class="link" id="btn-rec-cancelar" type="button">Cancelar</button>
+      </div>
+      <p class="muted">Escanea cada libro que llegó o búscalo por título. Cada escaneo suma una pieza.</p>
+      <div class="search">
+        <label for="rec-q" class="sr">Código o título</label>
+        <input id="rec-q" type="search" autocomplete="off" spellcheck="false" placeholder="Escanea o escribe título o código">
+      </div>
+      <ul class="results compact" id="rec-sug"></ul>
+      <ul class="lines rec-lines" id="rec-lines"></ul>
+      <div class="field-row"><label for="rec-nota">Nota</label><input id="rec-nota" type="text" placeholder="Proveedor o factura (opcional)" autocomplete="off"></div>
+      <div class="actions"><button class="btn primary" id="btn-rec-guardar" type="button" disabled>Guardar entrada</button><span class="muted" id="rec-total"></span></div>
+    </section>
+
+    <div class="inv-tools">
+      <label for="inv-q" class="sr">Buscar en inventario</label>
+      <input id="inv-q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar por título o código">
+      <div class="seg" role="group" aria-label="Filtro">
+        <button type="button" class="is-on" data-filtro="todos" id="f-todos">Todos</button>
+        <button type="button" data-filtro="pocos" id="f-pocos">Por agotarse</button>
+        <button type="button" data-filtro="cero" id="f-cero">Sin existencia</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="inv-table">
+        <thead><tr><th>Artículo</th><th class="n">Precio</th><th class="n">Existencia</th><th class="n">Valor</th><th></th></tr></thead>
+        <tbody id="inv-rows"></tbody>
+      </table>
+    </div>
+    <p class="muted" id="inv-count"></p>
+  </main>
+
   <!-- RESPALDO -->
   <main class="view view-mas" id="view-mas" hidden>
     <section class="panel">
@@ -147,7 +193,7 @@
     </section>
     <section class="panel">
       <h2>Lo que sigue</h2>
-      <p>Inventario (entradas de mercancía y conteos), más vendidos y reportes con indicadores.</p>
+      <p>Reportes con indicadores (ventas por semana y mes, más vendidos) y pedidos de clientes.</p>
     </section>
   </main>
 
