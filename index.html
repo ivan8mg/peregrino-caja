@@ -21,12 +21,12 @@
       <span class="brand-sub">Librería · Caja</span>
     </div>
     <nav class="tabs" aria-label="Secciones">
-      <button class="tab is-active" data-view="vender" id="tab-vender">Vender</button>
-      <button class="tab" data-view="ventas" id="tab-ventas">Ventas</button>
-      <button class="tab" data-view="inventario" id="tab-inventario">Inventario</button>
-      <button class="tab" data-view="mas" id="tab-mas">Respaldo</button>
+      <button class="tab is-active" data-view="vender" id="tab-vender"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20 7H6"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg><span>Vender</span></button>
+      <button class="tab" data-view="ventas" id="tab-ventas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Ventas</span></button>
+      <button class="tab" data-view="inventario" id="tab-inventario"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/></svg><span>Inventario</span></button>
+      <button class="tab" data-view="mas" id="tab-mas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.5A3.8 3.8 0 0 1 17 18z"/><path d="M12 11v5M9.5 13.5 12 16l2.5-2.5"/></svg><span>Respaldo</span></button>
     </nav>
-    <span class="net" id="net" title="Todo se guarda en este equipo">Guardado en este equipo</span>
+    <button class="net" id="net" type="button" title="Todo se guarda en este equipo">Guardado en este equipo</button>
     <button class="btn letra" id="btn-letra" type="button" aria-pressed="false" title="Letra más grande">A+</button>
   </header>
 
@@ -146,14 +146,26 @@
   <!-- INVENTARIO -->
   <main class="view view-inventario" id="view-inventario" hidden>
     <h2 class="view-title">Inventario</h2>
+    <div class="inv-tools">
+      <label for="inv-q" class="sr">Buscar en inventario</label>
+      <input id="inv-q" type="search" autocomplete="off" spellcheck="false" placeholder="Busca un libro: título o código">
+      <div class="seg" role="group" aria-label="Filtro">
+        <button type="button" class="is-on" data-filtro="todos" id="f-todos">Todos</button>
+        <button type="button" data-filtro="pocos" id="f-pocos">Por agotarse</button>
+        <button type="button" data-filtro="cero" id="f-cero">Sin existencia</button>
+        <button type="button" data-filtro="sinprecio" id="f-sinprecio">Sin precio</button>
+      </div>
+    </div>
+    <div id="inv-inicio" class="inv-inicio">
     <div class="tiles">
-      <button class="tile" id="btn-recibir" type="button"><b>Llegó mercancía</b><span>Escanea los libros que llegaron</span></button>
-      <button class="tile" id="btn-nuevo" type="button"><b>Dar de alta un libro</b><span>Un libro nuevo, rápido</span></button>
-      <button class="tile" id="btn-excel" type="button"><b>Cargar desde Excel</b><span>Muchos libros a la vez</span></button>
-      <button class="tile" id="btn-sinprecio" type="button"><b>Libros sin precio</b><span id="sinprecio-n">Todos tienen precio</span></button>
+      <button class="tile" id="btn-recibir" type="button"><span class="tile-ico t-recibir"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 13v6M9.5 16.5 12 19l2.5-2.5"/></svg></span><span class="tile-txt"><b>Llegó mercancía</b><span>Escanea los libros que llegaron</span></span></button>
+      <button class="tile" id="btn-nuevo" type="button"><span class="tile-ico t-nuevo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span><span class="tile-txt"><b>Dar de alta un libro</b><span>Un libro nuevo, rápido</span></span></button>
+      <button class="tile" id="btn-excel" type="button"><span class="tile-ico t-excel"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg></span><span class="tile-txt"><b>Cargar desde Excel</b><span>Muchos libros a la vez</span></span></button>
+      <button class="tile" id="btn-sinprecio" type="button"><span class="tile-ico t-precio"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></span><span class="tile-txt"><b>Libros sin precio</b><span id="sinprecio-n">Todos tienen precio</span></span></button>
     </div>
     <p class="aviso" id="aviso-precio" hidden></p>
     <div class="kpis" id="inv-kpis"></div>
+    </div>
 
     <section class="panel" id="panel-precios" hidden>
       <div class="ventas-head">
@@ -221,16 +233,6 @@
       <div class="actions"><button class="btn primary" id="btn-rec-guardar" type="button" disabled>Guardar entrada</button><span class="muted" id="rec-total"></span></div>
     </section>
 
-    <div class="inv-tools">
-      <label for="inv-q" class="sr">Buscar en inventario</label>
-      <input id="inv-q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar por título o código">
-      <div class="seg" role="group" aria-label="Filtro">
-        <button type="button" class="is-on" data-filtro="todos" id="f-todos">Todos</button>
-        <button type="button" data-filtro="pocos" id="f-pocos">Por agotarse</button>
-        <button type="button" data-filtro="cero" id="f-cero">Sin existencia</button>
-        <button type="button" data-filtro="sinprecio" id="f-sinprecio">Sin precio</button>
-      </div>
-    </div>
     <div class="table-wrap">
       <table class="inv-table">
         <thead><tr><th>Artículo</th><th class="n">Precio</th><th class="n">Existencia</th><th class="n">Valor</th><th></th></tr></thead>

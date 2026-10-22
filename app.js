@@ -162,13 +162,15 @@
     if (p.tipo === "descuento") return `<span class="chip ok">Descuento</span>`;
     const enCarrito = S.carrito.find((l) => l.codigo === p.codigo)?.cantidad || 0;
     const quedan = p.existencia - enCarrito;
-    if (quedan <= 0) return `<span class="chip warn">Sin existencia registrada</span>`;
+    if (quedan <= 0) return `<span class="chip bad">Sin existencia</span>`;
     if (quedan <= 3) return `<span class="chip warn">Quedan ${quedan}</span>`;
-    return `<span class="chip">${quedan} en existencia</span>${extra}`;
+    return `<span class="chip ok">${quedan} en existencia</span>${extra}`;
   }
 
   function itemHTML(p, nota = "") {
-    return `<li><button class="item${p.tipo === "descuento" ? " is-desc" : ""}" data-add="${esc(p.codigo)}" type="button">
+    const ex = p.existencia - (S.carrito.find((l) => l.codigo === p.codigo)?.cantidad || 0);
+    const est = p.tipo === "descuento" ? " is-desc" : ex <= 0 ? " agotado" : ex <= 3 ? " poco" : "";
+    return `<li><button class="item${est}" data-add="${esc(p.codigo)}" type="button">
       <span class="t">${esc(p.titulo)}</span>
       <span class="meta">${stockChip(p)}${p.sinDescuento ? '<span class="chip">No aplica descuento</span>' : ""}${nota}</span>
       <span class="c">${esc(p.codigo)}</span>${sinPrecio(p) ? '<span class="p sinp">Sin precio</span>' : `<span class="p">${money(p.precio)}</span>`}
@@ -690,11 +692,13 @@
     const faltan = vendibles.filter(sinPrecio).length;
     $("#sinprecio-n").textContent = faltan ? `${faltan} ${faltan === 1 ? "libro espera" : "libros esperan"} precio` : "Todos tienen precio";
     $("#btn-sinprecio").classList.toggle("warn", faltan > 0);
+    $("#btn-sinprecio").classList.toggle("listo", !faltan);
     $("#aviso-precio").hidden = !faltan;
     $("#aviso-precio").innerHTML = faltan ? `<span><b>${faltan} ${faltan === 1 ? "libro no tiene" : "libros no tienen"} precio.</b> Mientras no lo tengan, la app te lo pedirá al venderlos.</span> <button class="btn" type="button" id="btn-aviso-precio">Ponerles precio</button>` : "";
     if (faltan) $("#btn-aviso-precio").addEventListener("click", abrirPrecios);
     if (!$("#panel-precios").hidden) renderPrecios();
     const q = $("#inv-q").value;
+    $("#inv-inicio").hidden = !!q.trim(); // al buscar, solo la búsqueda y sus resultados
     let lista = buscar(q) || [...vendibles].sort((a, b) => a.titulo.localeCompare(b.titulo, "es"));
     if (S.invFiltro === "pocos") lista = lista.filter((p) => p.existencia > 0 && p.existencia <= 3);
     if (S.invFiltro === "sinprecio") lista = lista.filter(sinPrecio);
@@ -703,7 +707,7 @@
     $("#inv-rows").innerHTML = vis.map((p) => `<tr data-edit="${esc(p.codigo)}">
         <td><div class="t">${esc(p.titulo)}</div><div class="c">${esc(p.codigo)}${p.autor ? " · " + esc(p.autor) : ""}${p.sinDescuento ? ' <span class="chip">No aplica descuento</span>' : ""}${p.tipo === "descuento" ? ' <span class="chip ok">Descuento</span>' : ""}</div></td>
         <td class="n">${sinPrecio(p) ? '<span class="chip warn">Sin precio</span>' : money(p.precio)}</td>
-        <td class="n ${p.existencia < 0 ? "ex-neg" : p.existencia === 0 ? "ex-cero" : ""}">${p.existencia}</td>
+        <td class="n ${p.existencia <= 0 ? "ex-cero" : p.existencia <= 3 ? "ex-poco" : "ex-ok"}">${p.existencia}</td>
         <td class="n">${p.existencia > 0 ? money(p.existencia * p.precio) : "—"}</td>
         <td><button class="btn" type="button" data-edit="${esc(p.codigo)}">Editar</button></td>
       </tr>`).join("") || `<tr><td colspan="5" class="muted">No hay artículos con ese filtro.</td></tr>`;
@@ -1121,21 +1125,17 @@
   }
 
   async function estadoSync(texto) {
+    // Verde: al día con los demás equipos. Amarillo: falta subir o no está conectado. Rojo: error.
     const n = $("#net");
     const cfg = S.meta.sync;
-    n.classList.remove("off");
-    if (!cfg || !cfg.url) {
-      n.classList.toggle("off", !navigator.onLine);
-      n.textContent = navigator.onLine ? "Guardado en este equipo" : "Sin internet · se guarda igual";
-      n.title = "Todo se guarda en este equipo";
-      return;
-    }
+    const pon = (estado, txt, title) => { n.dataset.estado = estado; n.textContent = txt; n.title = title; };
+    if (!cfg || !cfg.url) return pon("local", "Solo este equipo", "No está conectado a Google Sheets: las ventas de otros equipos no llegan aquí. Toca para conectarlo.");
     const pend = S.ventas.filter((v) => !v.sincronizado).length;
-    if (texto) { n.textContent = texto; return; }
-    if (!navigator.onLine) { n.classList.add("off"); n.textContent = pend ? `Sin internet · ${pend} por subir` : "Sin internet · se guarda igual"; return; }
-    if (syncError) { n.classList.add("off"); n.textContent = "No se pudo sincronizar"; n.title = syncError; return; }
-    n.title = "Sincronizado con Google Sheets";
-    n.textContent = pend ? `${pend} por subir` : S.meta.ultimaSync ? `Sincronizado ${hora(S.meta.ultimaSync)}` : "Conectado";
+    if (texto) return pon("pend", texto, "Sincronizando con los demás equipos");
+    if (!navigator.onLine) return pon("pend", pend ? `Sin internet · ${pend} por subir` : "Sin internet", "Se guarda en este equipo y se sube al volver el internet");
+    if (syncError) return pon("err", "No se pudo sincronizar", syncError + " Toca para reintentar.");
+    if (pend) return pon("pend", `${pend} por subir`, "Toca para subir ahora");
+    pon("ok", S.meta.ultimaSync ? `Al día ${hora(S.meta.ultimaSync)}` : "Conectado", "Sincronizado con los demás equipos. Toca para actualizar ahora.");
   }
 
   async function sincronizar(manual = false) {
@@ -1420,7 +1420,10 @@
     addEventListener("online", () => sincronizar());
     addEventListener("offline", () => estadoSync());
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") sincronizar(); });
-    setInterval(() => { if (document.visibilityState === "visible") sincronizar(); }, 3 * 60 * 1000);
+    // Cada 45 segundos con la app abierta, para ver pronto lo que venden los otros equipos.
+    setInterval(() => { if (document.visibilityState === "visible") sincronizar(); }, 45 * 1000);
+    addEventListener("focus", () => sincronizar());
+    $("#net").addEventListener("click", () => { if (S.meta.sync && S.meta.sync.url) sincronizar(true); else vista("mas"); });
     $("#btn-conectar").addEventListener("click", conectar);
     $("#btn-sync-ahora").addEventListener("click", () => sincronizar(true));
     $("#btn-desconectar").addEventListener("click", desconectar);
