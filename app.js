@@ -462,6 +462,20 @@
     $("#stats").innerHTML = `<span><b>${S.productos.length}</b> artículos</span><span><b>${S.ventas.length}</b> ventas</span><span><b>${mov.length}</b> movimientos</span><span>Equipo <b>${esc(S.meta.dispositivo)}</b></span>${DB.persistent ? "" : "<span>Modo de prueba: este navegador no permite guardar</span>"}`;
   }
 
+  // Borra ventas, movimientos, catálogo y conexión de este equipo y vuelve al catálogo inicial (el del Excel).
+  function dialogoCero() {
+    hoja(`<h3 id="sheet-title">Empezar de cero</h3>
+      <p>Se borran de este equipo todas las ventas, movimientos de inventario, cambios al catálogo y la conexión con Google Sheets. La app vuelve al catálogo del Excel original.</p>
+      <p class="muted">Tu hoja de Google no se toca. Si quieres conservar algo, descarga un respaldo antes.</p>
+      <label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="cero-ok"> Entiendo que esto no se puede deshacer</label>
+      <div class="row"><button class="btn" type="button" data-close>Cancelar</button><button class="btn danger" type="button" id="btn-cero-ok" disabled>Borrar todo</button></div>`);
+    $("#cero-ok").addEventListener("change", (e) => ($("#btn-cero-ok").disabled = !e.target.checked));
+    $("#btn-cero-ok").addEventListener("click", async () => {
+      await DB.write([["meta", { clave: "dispositivo", valor: S.meta.dispositivo }]], Object.keys(STORES));
+      location.reload();
+    });
+  }
+
   async function respaldo() {
     const data = { app: "peregrino", version: 1, exportado: now(), dispositivo: S.meta.dispositivo };
     for (const s of Object.keys(STORES)) data[s] = await DB.getAll(s);
@@ -924,6 +938,7 @@
     });
     $("#btn-rec-guardar").addEventListener("click", recGuardar);
     $("#btn-respaldo").addEventListener("click", respaldo);
+    $("#btn-cero").addEventListener("click", dialogoCero);
     $("#btn-csv").addEventListener("click", csv);
     $("#file-restaurar").addEventListener("change", (e) => { if (e.target.files[0]) restaurar(e.target.files[0]); e.target.value = ""; });
 
