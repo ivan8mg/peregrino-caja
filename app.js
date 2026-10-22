@@ -171,7 +171,7 @@
     return `<li><button class="item${p.tipo === "descuento" ? " is-desc" : ""}" data-add="${esc(p.codigo)}" type="button">
       <span class="t">${esc(p.titulo)}</span>
       <span class="meta">${stockChip(p)}${p.sinDescuento ? '<span class="chip">No aplica descuento</span>' : ""}${nota}</span>
-      <span class="c">${esc(p.codigo)}</span><span class="p">${money(p.precio)}</span>
+      <span class="c">${esc(p.codigo)}</span>${sinPrecio(p) ? '<span class="p sinp">Sin precio</span>' : `<span class="p">${money(p.precio)}</span>`}
     </button></li>`;
   }
 
@@ -203,9 +203,15 @@
 
   // ---------- Carrito ----------
   function agregar(p, cantidad = 1) {
+    const enCarrito = S.carrito.find((x) => x.codigo === p.codigo && !x.libre);
+    if (!p.libre && sinPrecio(p) && !enCarrito) return dialogoPrecioVenta(p, cantidad);
+    agregarLinea(p, enCarrito ? enCarrito.precio : p.precio, cantidad);
+  }
+
+  function agregarLinea(p, precio, cantidad = 1) {
     const l = S.carrito.find((x) => x.codigo === p.codigo && !x.libre);
     if (l) l.cantidad += cantidad;
-    else S.carrito.push({ codigo: p.codigo, titulo: p.titulo, precio: p.precio, cantidad, sinDescuento: !!p.sinDescuento, tipo: p.tipo, libre: !!p.libre });
+    else S.carrito.push({ codigo: p.codigo, titulo: p.titulo, precio, cantidad, sinDescuento: !!p.sinDescuento, tipo: p.tipo, libre: !!p.libre });
     render();
     if (isMobile() && !$("#ticket").classList.contains("open")) toast(`Agregado: ${p.titulo}`);
   }
@@ -550,14 +556,22 @@
       <div class="kpi"><span>Valor a precio de venta</span><strong>${money(valor)}</strong><small>Precio × existencia</small></div>
       <div class="kpi"><span>Por agotarse</span><strong>${pocos}</strong><small>3 piezas o menos</small></div>
       <div class="kpi"><span>Sin existencia</span><strong>${cero}</strong><small>Cero o negativa</small></div>`;
+    const faltan = vendibles.filter(sinPrecio).length;
+    $("#sinprecio-n").textContent = faltan ? `${faltan} ${faltan === 1 ? "libro espera" : "libros esperan"} precio` : "Todos tienen precio";
+    $("#btn-sinprecio").classList.toggle("warn", faltan > 0);
+    $("#aviso-precio").hidden = !faltan;
+    $("#aviso-precio").innerHTML = faltan ? `<span><b>${faltan} ${faltan === 1 ? "libro no tiene" : "libros no tienen"} precio.</b> Mientras no lo tengan, la app te lo pedirá al venderlos.</span> <button class="btn" type="button" id="btn-aviso-precio">Ponerles precio</button>` : "";
+    if (faltan) $("#btn-aviso-precio").addEventListener("click", abrirPrecios);
+    if (!$("#panel-precios").hidden) renderPrecios();
     const q = $("#inv-q").value;
     let lista = buscar(q) || [...vendibles].sort((a, b) => a.titulo.localeCompare(b.titulo, "es"));
     if (S.invFiltro === "pocos") lista = lista.filter((p) => p.existencia > 0 && p.existencia <= 3);
+    if (S.invFiltro === "sinprecio") lista = lista.filter(sinPrecio);
     if (S.invFiltro === "cero") lista = lista.filter((p) => p.existencia <= 0 && p.tipo !== "descuento");
     const vis = lista.slice(0, 150);
     $("#inv-rows").innerHTML = vis.map((p) => `<tr data-edit="${esc(p.codigo)}">
         <td><div class="t">${esc(p.titulo)}</div><div class="c">${esc(p.codigo)}${p.autor ? " · " + esc(p.autor) : ""}${p.sinDescuento ? ' <span class="chip">No aplica descuento</span>' : ""}${p.tipo === "descuento" ? ' <span class="chip ok">Descuento</span>' : ""}</div></td>
-        <td class="n">${money(p.precio)}</td>
+        <td class="n">${sinPrecio(p) ? '<span class="chip warn">Sin precio</span>' : money(p.precio)}</td>
         <td class="n ${p.existencia < 0 ? "ex-neg" : p.existencia === 0 ? "ex-cero" : ""}">${p.existencia}</td>
         <td class="n">${p.existencia > 0 ? money(p.existencia * p.precio) : "—"}</td>
         <td><button class="btn" type="button" data-edit="${esc(p.codigo)}">Editar</button></td>
@@ -565,35 +579,67 @@
     $("#inv-count").textContent = lista.length > vis.length ? `Mostrando ${vis.length} de ${lista.length}. Busca para ver los demás.` : `${lista.length} artículos`;
   }
 
+  const tipoDe = (codigo, precio) => (precio < 0 ? "descuento" : /^97\d{11}$/.test(codigo) ? "libro" : "articulo");
+  const sinPrecio = (p) => p.tipo !== "descuento" && !(p.precio > 0);
+
+  // Alta rápida (p = null) o edición de un artículo.
   async function dialogoProducto(p, alGuardar, codigoNuevo = "") {
     const nuevo = !p;
     const movs = nuevo ? [] : (await DB.getAll("movimientos")).filter((m) => m.codigo === p.codigo).sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 12);
-    hoja(`<h3 id="sheet-title">${nuevo ? "Nuevo artículo" : "Editar artículo"}</h3>
-      <form id="f-prod" class="cash">
-        <label>Código<input type="text" id="p-codigo" value="${esc(nuevo ? codigoNuevo : p.codigo)}" ${nuevo ? "" : "readonly"} autocomplete="off" placeholder="ISBN o código interno"></label>
-        <label>Título<input type="text" id="p-titulo" value="${esc(p?.titulo || "")}" required autocomplete="off"></label>
-        <label>Autor<input type="text" id="p-autor" value="${esc(p?.autor || "")}" autocomplete="off"></label>
+    hoja(`<h3 id="sheet-title">${nuevo ? "Dar de alta un libro" : "Editar libro"}</h3>
+      <form id="f-prod" class="cash big-form">
+        <label>Código de barras o ISBN<input type="text" id="p-codigo" value="${esc(nuevo ? codigoNuevo : p.codigo)}" ${nuevo ? "" : "readonly"} autocomplete="off" inputmode="numeric" placeholder="${nuevo ? "Escanéalo o escríbelo" : ""}"></label>
+        <p class="aviso" id="p-existe" hidden></p>
+        <label>Título<input type="text" id="p-titulo" value="${esc(p?.titulo || "")}" autocomplete="off"></label>
         <div class="grid2">
-          <label>Precio<input type="number" id="p-precio" step="any" inputmode="decimal" value="${p ? p.precio : ""}" required></label>
-          <label>${nuevo ? "Existencia inicial" : "Existencia contada"}<input type="number" id="p-exist" step="1" inputmode="numeric" value="${p ? p.existencia : 0}"></label>
+          <label>Precio<input type="number" id="p-precio" step="any" min="0" inputmode="decimal" value="${p && p.precio ? p.precio : ""}" placeholder="Vacío si no lo sabes"></label>
+          <label>${nuevo ? "¿Cuántos llegaron?" : "Hay en el anaquel"}<input type="number" id="p-exist" step="1" inputmode="numeric" value="${p ? p.existencia : ""}" placeholder="0"></label>
         </div>
-        <label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="p-sindesc" ${p?.sinDescuento ? "checked" : ""}> No aplica descuento</label>
+        <details ${!nuevo && (p.autor || p.sinDescuento) ? "open" : ""}><summary>Más datos (opcional)</summary>
+          <div class="cash">
+            <label>Autor<input type="text" id="p-autor" value="${esc(p?.autor || "")}" autocomplete="off"></label>
+            <label class="check"><input type="checkbox" id="p-sindesc" ${p?.sinDescuento ? "checked" : ""}> No aplica descuento</label>
+          </div>
+        </details>
         ${nuevo ? "" : `<div><span class="muted" style="font-size:.85rem">Movimientos en este equipo</span>
           <ul class="hist">${movs.map((m) => `<li><span>${new Date(m.fecha).toLocaleDateString("es-MX", { day: "numeric", month: "short" })} ${hora(m.fecha)} · ${esc(m.motivo)}</span><span class="n">${m.cantidad > 0 ? "+" : ""}${m.cantidad}</span></li>`).join("") || '<li><span class="muted">Sin movimientos todavía.</span></li>'}</ul></div>`}
-        <p class="change bad" id="p-err"></p>
-        <div class="row"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="submit">Guardar</button></div>
+        <p class="change bad" id="p-err" role="alert"></p>
+        <div class="row">
+          <button class="btn" type="button" data-close>Cancelar</button>
+          ${nuevo ? '<button class="btn" type="submit" data-otro="1" id="p-otro">Guardar y dar de alta otro</button>' : ""}
+          <button class="btn primary" type="submit" id="p-guardar">Guardar</button>
+        </div>
       </form>`);
     $("#sheet").classList.add("wide");
     (nuevo && !codigoNuevo ? $("#p-codigo") : $("#p-titulo")).focus();
+
+    const revisarCodigo = () => {
+      const c = $("#p-codigo").value.trim();
+      const ya = nuevo && c && S.porCodigo.get(c);
+      $("#p-existe").hidden = !ya;
+      if (ya) $("#p-existe").innerHTML = `<span>Este código ya está dado de alta: <b>${esc(ya.titulo)}</b>.</span> <button class="btn" type="button" id="p-editar-ya">Editarlo</button>`;
+      if (ya) $("#p-editar-ya").addEventListener("click", () => { cerrarHoja(); dialogoProducto(ya); });
+      return !ya;
+    };
+    if (nuevo) {
+      $("#p-codigo").addEventListener("input", revisarCodigo);
+      // El lector de código de barras manda Enter: pasar al título en lugar de guardar.
+      $("#p-codigo").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (revisarCodigo()) $("#p-titulo").focus(); } });
+      revisarCodigo();
+    }
+
     $("#f-prod").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const codigo = $("#p-codigo").value.trim() || (nuevo ? "A" + Date.now().toString().slice(-8) : p.codigo);
+      const otro = e.submitter && e.submitter.dataset.otro;
+      const codigo = $("#p-codigo").value.trim().replace(/^([\d-\s]+)$/, (m) => m.replace(/[-\s]/g, "")) || (nuevo ? "A" + Date.now().toString().slice(-8) : p.codigo);
       const titulo = $("#p-titulo").value.trim();
-      const precio = r2(Number($("#p-precio").value));
+      const precioTxt = $("#p-precio").value.trim();
+      const precio = precioTxt === "" ? 0 : r2(Number(precioTxt));
       const exist = Math.round(Number($("#p-exist").value) || 0);
-      if (!titulo || !isFinite(precio)) { $("#p-err").textContent = "Escribe el título y el precio."; return; }
-      if (nuevo && S.porCodigo.has(codigo)) { $("#p-err").textContent = `El código ${codigo} ya existe: ${S.porCodigo.get(codigo).titulo}.`; return; }
-      const datos = { titulo, autor: $("#p-autor").value.trim(), precio, sinDescuento: $("#p-sindesc").checked, tipo: precio < 0 ? "descuento" : (/^97\d{11}$/.test(codigo) ? "libro" : "articulo") };
+      if (!titulo) { $("#p-err").textContent = "Falta el título."; $("#p-titulo").focus(); return; }
+      if (!isFinite(precio)) { $("#p-err").textContent = "El precio debe ser un número."; return; }
+      if (nuevo && S.porCodigo.has(codigo)) { revisarCodigo(); $("#p-err").textContent = "Ese código ya existe."; return; }
+      const datos = { titulo, autor: $("#p-autor").value.trim(), precio, sinDescuento: $("#p-sindesc").checked, tipo: tipoDe(codigo, precio) };
       let prod = p;
       if (nuevo) {
         prod = { codigo, ...datos, existencia: 0, actualizado: now(), pendiente: true };
@@ -607,10 +653,283 @@
       if (exist !== prod.existencia) await moverExistencia([{ p: prod, cantidad: exist - prod.existencia }], nuevo ? "alta" : "conteo");
       else programarSync();
       cerrarHoja();
-      toast(nuevo ? `Agregado: ${titulo}` : `Guardado: ${titulo}`);
+      toast(nuevo ? `Dado de alta: ${titulo}${precio ? "" : " (sin precio)"}` : `Guardado: ${titulo}`);
       renderInventario(); renderResultados();
       if (alGuardar) alGuardar(prod);
+      if (otro) dialogoProducto(null);
     });
+  }
+
+  // ---------- Precios faltantes ----------
+  async function guardarPrecio(p, precio) {
+    Object.assign(p, { precio: r2(precio), tipo: tipoDe(p.codigo, precio), actualizado: now(), pendiente: true });
+    await DB.write([["productos", { ...sinFlags(p), pendiente: true }]]);
+    programarSync();
+  }
+
+  function renderPrecios() {
+    const lista = S.productos.filter(sinPrecio).sort((a, b) => a.titulo.localeCompare(b.titulo, "es"));
+    $("#precios-lista").innerHTML = lista.map((p) => `<li>
+        <div class="pt"><b>${esc(p.titulo)}</b><span class="muted">${esc(p.codigo)} · ${p.existencia} en existencia</span></div>
+        <div class="pf"><label class="sr" for="pr-${esc(p.codigo)}">Precio de ${esc(p.titulo)}</label>
+          <input type="number" min="0" step="any" inputmode="decimal" id="pr-${esc(p.codigo)}" data-precio="${esc(p.codigo)}" placeholder="$ Precio">
+          <button class="btn primary" type="button" data-guardar-precio="${esc(p.codigo)}">Guardar</button></div>
+      </li>`).join("") || `<li class="muted">Todos los libros tienen precio.</li>`;
+  }
+
+  async function guardarDesdePanel(codigo) {
+    const input = document.querySelector(`[data-precio="${CSS.escape(codigo)}"]`);
+    const precio = Number(input.value);
+    if (!(precio > 0)) { input.focus(); toast("Escribe un precio mayor a cero."); return; }
+    const p = S.porCodigo.get(codigo);
+    await guardarPrecio(p, precio);
+    toast(`${p.titulo}: ${money(precio)}`);
+    renderPrecios(); renderInventario(); renderResultados();
+    document.querySelector("[data-precio]")?.focus();
+  }
+
+  // Al vender un libro sin precio, se pregunta en ese momento.
+  function dialogoPrecioVenta(p, cantidad) {
+    hoja(`<h3 id="sheet-title">Este libro no tiene precio</h3>
+      <p><b>${esc(p.titulo)}</b><br><span class="muted">${esc(p.codigo)}</span></p>
+      <form id="f-pv" class="cash big-form">
+        <label>¿En cuánto lo vendes?<input type="number" id="pv-precio" step="any" min="0" inputmode="decimal" required></label>
+        <label class="check"><input type="checkbox" id="pv-guardar" checked> Guardar este precio para la próxima vez</label>
+        <div class="row"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="submit">Agregar a la venta</button></div>
+      </form>`);
+    $("#pv-precio").focus();
+    $("#f-pv").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const precio = r2(Number($("#pv-precio").value));
+      if (!(precio > 0)) return;
+      if ($("#pv-guardar").checked) await guardarPrecio(p, precio);
+      cerrarHoja();
+      agregarLinea(p, precio, cantidad);
+    });
+  }
+
+  // ---------- Carga desde Excel ----------
+  const COLS_EXCEL = ["CODIGO", "TITULO", "AUTOR", "PRECIO", "CANTIDAD", "SIN DESCUENTO"];
+  let xlsxCarga = null;
+  function cargarXLSX() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (!xlsxCarga) xlsxCarga = new Promise((ok, mal) => {
+      const s = document.createElement("script");
+      s.src = "vendor/xlsx.full.min.js";
+      s.onload = () => ok(window.XLSX);
+      s.onerror = () => { xlsxCarga = null; mal(new Error("No se pudo abrir el lector de Excel. Revisa tu conexión e intenta otra vez.")); };
+      document.head.appendChild(s);
+    });
+    return xlsxCarga;
+  }
+
+  async function descargarExcel(nombre, filas) {
+    try {
+      const X = await cargarXLSX();
+      const ws = X.utils.aoa_to_sheet([COLS_EXCEL, ...filas]);
+      ws["!cols"] = [{ wch: 16 }, { wch: 46 }, { wch: 24 }, { wch: 10 }, { wch: 11 }, { wch: 15 }];
+      const ayuda = X.utils.aoa_to_sheet([
+        ["Cómo llenar el formato de Peregrino"],
+        ["Una fila por libro. No cambies los nombres de las columnas de la hoja Inventario."],
+        ["CODIGO: ISBN o código interno. Si ya existe en la app, el libro se actualiza; si no, se da de alta."],
+        ["TITULO: obligatorio para libros nuevos."],
+        ["PRECIO: solo el número, sin signo de pesos. Vacío = no cambia (o queda sin precio si es nuevo)."],
+        ["CANTIDAD: piezas. Al subirlo eliges si se suman (llegó mercancía) o reemplazan la existencia (conteo)."],
+        ["SIN DESCUENTO: escribe SI si al libro no se le aplican descuentos."],
+        ["Una celda vacía no cambia nada."],
+      ]);
+      ayuda["!cols"] = [{ wch: 100 }];
+      const wb = X.utils.book_new();
+      X.utils.book_append_sheet(wb, ws, "Inventario");
+      X.utils.book_append_sheet(wb, ayuda, "Instrucciones");
+      X.writeFile(wb, nombre);
+      $("#excel-msg").textContent = `Descargado: ${nombre}. Lo encuentras en la carpeta Descargas.`;
+    } catch (e) { $("#excel-msg").textContent = e.message; }
+  }
+
+  function exportarInventario() {
+    const filas = S.productos.filter((p) => p.tipo !== "descuento").sort((a, b) => a.titulo.localeCompare(b.titulo, "es"))
+      .map((p) => [p.codigo, p.titulo, p.autor || "", p.precio > 0 ? p.precio : "", p.existencia, p.sinDescuento ? "SI" : ""]);
+    descargarExcel(`peregrino-inventario-${dayKey(now())}.xlsx`, filas);
+  }
+
+  // Lee la primera hoja. Reconoce los encabezados aunque cambien de orden (también los de los Excel anteriores de la librería).
+  async function leerExcel(file) {
+    const X = await cargarXLSX();
+    const wb = X.read(await file.arrayBuffer(), { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const aoa = X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+    const clave = (v) => norm(v).replace(/[^a-z]/g, "");
+    const alias = {
+      codigo: ["codigo", "isbn", "clave", "codigodebarras"],
+      titulo: ["titulo", "descripcion", "nombre", "libro"],
+      autor: ["autor"],
+      precio: ["precio", "preciocasa", "punitario", "preciounitario", "preciodeventa", "precioventa"],
+      cantidad: ["cantidad", "existencia", "piezas", "stock"],
+      sinDescuento: ["sindescuento", "noaplicadescuento"],
+    };
+    let hi = aoa.slice(0, 10).findIndex((r) => r.some((v) => alias.codigo.includes(clave(v))));
+    let cols = { codigo: 0, titulo: 1, autor: 2, precio: 3, cantidad: 4, sinDescuento: 5 };
+    if (hi >= 0) {
+      cols = {};
+      aoa[hi].forEach((v, i) => { const k = clave(v); for (const [campo, al] of Object.entries(alias)) if (al.includes(k) && cols[campo] === undefined) cols[campo] = i; });
+    }
+    return aoa.slice(hi + 1).map((r, i) => {
+      const o = { fila: hi + 2 + i };
+      for (const [campo, idx] of Object.entries(cols)) o[campo] = r[idx];
+      return o;
+    });
+  }
+
+  function planearExcel(filas, modo) {
+    const vacio = (v) => v === "" || v === null || v === undefined;
+    const porCod = new Map();
+    const errores = [];
+    for (const f of filas) {
+      if ([f.codigo, f.titulo, f.precio, f.cantidad].every(vacio)) continue;
+      let codigo = typeof f.codigo === "number" ? String(Math.round(f.codigo)) : String(f.codigo ?? "").trim();
+      if (/^[\d\s-]+$/.test(codigo)) codigo = codigo.replace(/[\s-]/g, "");
+      const it = {
+        fila: f.fila, codigo,
+        titulo: String(f.titulo ?? "").replace(/\(?NO APLICA DESCUENTOS?\)?/i, "").replace(/\s+/g, " ").trim(),
+        autor: String(f.autor ?? "").replace(/\s+/g, " ").trim(),
+        precio: null, cantidad: null, sinDescuento: null, error: "",
+      };
+      if (!vacio(f.precio)) {
+        const n = typeof f.precio === "number" ? f.precio : Number(String(f.precio).replace(/[$,\s]/g, ""));
+        if (Number.isFinite(n) && n >= 0) it.precio = r2(n); else it.error = `El precio “${f.precio}” no es válido`;
+      }
+      if (!vacio(f.cantidad)) {
+        const n = typeof f.cantidad === "number" ? f.cantidad : Number(String(f.cantidad).replace(/[,\s]/g, ""));
+        if (Number.isFinite(n)) it.cantidad = Math.round(n); else it.error = it.error || `La cantidad “${f.cantidad}” no es un número`;
+      }
+      if (!vacio(f.sinDescuento)) it.sinDescuento = /^(si|sí|s|x|1|true|verdadero)$/i.test(String(f.sinDescuento).trim());
+      if (!codigo) it.error = it.error || "Falta el código";
+      if (CODIGOS_PAGO[codigo]) it.error = it.error || "Los códigos 1, 2 y 3 son formas de pago";
+      if (it.error) { errores.push(it); continue; }
+      const prev = porCod.get(codigo);
+      if (prev) { // el mismo código en varias filas se junta en una
+        for (const k of ["titulo", "autor"]) if (it[k]) prev[k] = it[k];
+        for (const k of ["precio", "sinDescuento"]) if (it[k] !== null) prev[k] = it[k];
+        if (it.cantidad !== null) prev.cantidad = modo === "sumar" ? (prev.cantidad || 0) + it.cantidad : it.cantidad;
+        prev.filas.push(it.fila);
+      } else porCod.set(codigo, { ...it, filas: [it.fila] });
+    }
+    const cambios = [];
+    let iguales = 0;
+    for (const it of porCod.values()) {
+      const p = S.porCodigo.get(it.codigo);
+      if (!p) {
+        if (!it.titulo) { errores.push({ ...it, error: "Es un libro nuevo y le falta el título" }); continue; }
+        const t = ["Libro nuevo", it.precio ? money(it.precio) : "sin precio"];
+        if (it.cantidad) t.push(`${it.cantidad} piezas`);
+        cambios.push({ tipo: "nuevo", it, texto: t });
+        continue;
+      }
+      const meta = {}, t = [];
+      if (it.titulo && it.titulo !== p.titulo) { meta.titulo = it.titulo; t.push("cambia el título"); }
+      if (it.autor && it.autor !== (p.autor || "")) { meta.autor = it.autor; t.push("autor"); }
+      if (it.precio !== null && it.precio !== p.precio) { meta.precio = it.precio; t.push(`precio ${p.precio > 0 ? money(p.precio) : "sin precio"} → ${money(it.precio)}`); }
+      if (it.sinDescuento !== null && it.sinDescuento !== !!p.sinDescuento) { meta.sinDescuento = it.sinDescuento; t.push(it.sinDescuento ? "ya no aplica descuento" : "sí aplica descuento"); }
+      let delta = 0;
+      if (it.cantidad !== null) delta = modo === "sumar" ? it.cantidad : it.cantidad - p.existencia;
+      if (delta) t.push(modo === "sumar" ? `${delta > 0 ? "+" : ""}${delta} piezas, quedan ${p.existencia + delta}` : `existencia ${p.existencia} → ${p.existencia + delta}`);
+      if (t.length) cambios.push({ tipo: "cambio", it, p, meta, delta, texto: t }); else iguales++;
+    }
+    return { cambios, errores, iguales, modo };
+  }
+
+  async function abrirExcel(file) {
+    $("#excel-msg").textContent = "Leyendo el archivo…";
+    try {
+      const filas = await leerExcel(file);
+      const modo = document.querySelector('[name="excel-modo"]:checked').value;
+      S.excelPlan = { ...planearExcel(filas, modo), archivo: file.name };
+    } catch (e) {
+      $("#excel-msg").textContent = e.message && e.message.includes("lector") ? e.message : "No pude leer ese archivo. Guárdalo como Excel (.xlsx) e intenta de nuevo.";
+      return;
+    }
+    $("#excel-msg").textContent = "";
+    const { cambios, errores, iguales } = S.excelPlan;
+    const nuevos = cambios.filter((c) => c.tipo === "nuevo").length;
+    const act = cambios.length - nuevos;
+    const partes = [];
+    if (nuevos) partes.push(`<b>${nuevos}</b> ${nuevos === 1 ? "libro nuevo" : "libros nuevos"} se dan de alta`);
+    if (act) partes.push(`<b>${act}</b> ${act === 1 ? "libro se actualiza" : "libros se actualizan"}`);
+    if (iguales) partes.push(`${iguales} no cambian`);
+    if (errores.length) partes.push(`<span class="malo"><b>${errores.length}</b> ${errores.length === 1 ? "fila tiene" : "filas tienen"} un problema y no se guarda${errores.length === 1 ? "" : "n"}</span>`);
+    $("#excel-resumen").innerHTML = `Archivo <b>${esc(file.name)}</b>: ${partes.join(", ") || "no hay nada que cambiar"}.`;
+    const filasHTML = [
+      ...errores.map((e) => `<tr class="err"><td class="n">${e.fila}</td><td><div class="t">${esc(e.titulo || "(sin título)")}</div><div class="c">${esc(e.codigo)}</div></td><td>${esc(e.error)}</td></tr>`),
+      ...cambios.map((c) => `<tr><td class="n">${c.it.filas.join(", ")}</td><td><div class="t">${esc(c.it.titulo || c.p.titulo)}</div><div class="c">${esc(c.it.codigo)}</div></td><td>${c.tipo === "nuevo" ? '<span class="chip ok">Nuevo</span> ' : ""}${esc(c.texto.filter((x) => x !== "Libro nuevo").join(" · "))}</td></tr>`),
+    ];
+    $("#excel-filas").innerHTML = filasHTML.slice(0, 400).join("") + (filasHTML.length > 400 ? `<tr><td colspan="3" class="muted">Y ${filasHTML.length - 400} filas más.</td></tr>` : "");
+    $("#btn-excel-aplicar").disabled = !cambios.length;
+    $("#btn-excel-aplicar").textContent = cambios.length ? `Guardar ${cambios.length} ${cambios.length === 1 ? "cambio" : "cambios"}` : "Nada que guardar";
+    $("#excel-pasos").hidden = true;
+    $("#excel-revision").hidden = false;
+  }
+
+  async function aplicarExcel() {
+    const plan = S.excelPlan;
+    if (!plan || !plan.cambios.length) return;
+    const t = now();
+    const writes = [], mov = [];
+    for (const c of plan.cambios) {
+      if (c.tipo === "nuevo") {
+        const it = c.it;
+        const precio = it.precio ?? 0;
+        const p = { codigo: it.codigo, titulo: it.titulo, autor: it.autor || "", precio, sinDescuento: !!it.sinDescuento, tipo: tipoDe(it.codigo, precio), existencia: 0, actualizado: t, pendiente: true };
+        S.productos.push(p);
+        writes.push(["productos", { ...sinFlags(p), pendiente: true }]);
+        if (it.cantidad) mov.push({ p, cantidad: it.cantidad });
+      } else {
+        if (Object.keys(c.meta).length) {
+          Object.assign(c.p, c.meta, { actualizado: t, pendiente: true });
+          c.p.tipo = tipoDe(c.p.codigo, c.p.precio);
+          writes.push(["productos", { ...sinFlags(c.p), pendiente: true }]);
+        }
+        if (c.delta) mov.push({ p: c.p, cantidad: c.delta });
+      }
+    }
+    $("#btn-excel-aplicar").disabled = true;
+    await DB.write(writes);
+    indexar();
+    await moverExistencia(mov, (plan.modo === "sumar" ? "entrada" : "conteo") + ": Excel " + plan.archivo);
+    programarSync();
+    S.excelPlan = null;
+    cerrarExcel();
+    renderInventario(); renderResultados();
+    toast(`Listo: ${plan.cambios.length} ${plan.cambios.length === 1 ? "cambio guardado" : "cambios guardados"}`);
+  }
+
+  function cerrarExcel() {
+    $("#panel-excel").hidden = true;
+    $("#excel-pasos").hidden = false;
+    $("#excel-revision").hidden = true;
+    $("#excel-msg").textContent = "";
+  }
+
+  // ---------- Letra grande ----------
+  function aplicarLetra(grande) {
+    document.documentElement.classList.toggle("letra-grande", grande);
+    $("#btn-letra").setAttribute("aria-pressed", String(grande));
+    $("#btn-letra").title = grande ? "Letra normal" : "Letra más grande";
+    try { localStorage.setItem("peregrino-letra", grande ? "grande" : "normal"); } catch (e) {}
+  }
+
+  function cerrarPaneles() {
+    $("#panel-precios").hidden = true;
+    cerrarExcel();
+    if (!S.rec.length) $("#recepcion").hidden = true;
+  }
+
+  function abrirPrecios() {
+    cerrarPaneles();
+    $("#panel-precios").hidden = false;
+    renderPrecios();
+    $("#panel-precios").scrollIntoView({ block: "start" });
+    document.querySelector("[data-precio]")?.focus();
   }
 
   // Recepción de mercancía
@@ -849,7 +1168,7 @@
       const b = e.target.closest("[data-add]");
       if (!b) return;
       agregar(S.porCodigo.get(b.dataset.add));
-      if (!isMobile()) { $("#q").select(); $("#q").focus(); }
+      if (!isMobile() && $("#overlay").hidden) { $("#q").select(); $("#q").focus(); }
     });
     $("#results").addEventListener("keydown", (e) => {
       const items = [...document.querySelectorAll("#results .item")];
@@ -915,7 +1234,19 @@
     }));
     $("#inv-rows").addEventListener("click", (e) => { const c = e.target.closest("[data-edit]")?.dataset.edit; if (c) dialogoProducto(S.porCodigo.get(c)); });
     $("#btn-nuevo").addEventListener("click", () => dialogoProducto(null));
-    $("#btn-recibir").addEventListener("click", () => { $("#recepcion").hidden = false; $("#rec-q").focus(); });
+    $("#btn-sinprecio").addEventListener("click", abrirPrecios);
+    $("#btn-precios-cerrar").addEventListener("click", () => ($("#panel-precios").hidden = true));
+    $("#precios-lista").addEventListener("click", (e) => { const c = e.target.closest("[data-guardar-precio]")?.dataset.guardarPrecio; if (c) guardarDesdePanel(c); });
+    $("#precios-lista").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.dataset.precio) guardarDesdePanel(e.target.dataset.precio); });
+    $("#btn-excel").addEventListener("click", () => { cerrarPaneles(); $("#panel-excel").hidden = false; $("#panel-excel").scrollIntoView({ block: "start" }); cargarXLSX().catch(() => {}); });
+    $("#btn-excel-cerrar").addEventListener("click", cerrarExcel);
+    $("#btn-formato").addEventListener("click", () => descargarExcel("peregrino-formato.xlsx", []));
+    $("#btn-export-inv").addEventListener("click", exportarInventario);
+    $("#file-excel").addEventListener("change", (e) => { if (e.target.files[0]) abrirExcel(e.target.files[0]); e.target.value = ""; });
+    $("#btn-excel-aplicar").addEventListener("click", aplicarExcel);
+    $("#btn-excel-otro").addEventListener("click", () => { $("#excel-revision").hidden = true; $("#excel-pasos").hidden = false; });
+    $("#btn-letra").addEventListener("click", () => aplicarLetra(!document.documentElement.classList.contains("letra-grande")));
+    $("#btn-recibir").addEventListener("click", () => { cerrarPaneles(); $("#recepcion").hidden = false; $("#rec-q").focus(); });
     $("#btn-rec-cancelar").addEventListener("click", () => { S.rec = []; renderRecepcion(); $("#recepcion").hidden = true; });
     $("#rec-q").addEventListener("input", () => recBuscar(false));
     $("#rec-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); recBuscar(true); } });
@@ -960,6 +1291,7 @@
   async function iniciar() {
     $("#fecha").value = dayKey(now());
     if (isMobile()) $("#q").placeholder = "Busca título o código";
+    try { if (localStorage.getItem("peregrino-letra") === "grande") aplicarLetra(true); } catch (e) {}
     eventos();
     await cargar();
     render();

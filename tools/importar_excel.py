@@ -5,6 +5,7 @@ Uso: python3 importar_excel.py <catalogo.xlsx> <inventario.xlsx> <salida.js>
 Reglas:
 - Precio: el del inventario cuando el código aparece ahí (es el más reciente), si no el del catálogo.
 - Códigos repetidos en el catálogo: gana la última fila.
+- Artículos sin precio entran con precio 0 ("sin precio").
 - Existencia: la del inventario; lo demás queda en 0.
 - Los códigos 1, 2 y 3 (Efectivo, Transferencia, Tarjeta) no son productos: la app los usa como forma de pago.
 - Precio negativo = descuento (como en el Excel de macros).
@@ -31,9 +32,15 @@ def main(cat_path, inv_path, out_path):
         c, desc, precio = codigo(r[0]), limpiar(r[1]), r[2]
         if not c and not desc:
             continue
-        if not c or c in PAGOS or not isinstance(precio, (int, float)):
+        if not c or c in PAGOS:
             omitidos.append((c, desc, precio))
             continue
+        if not isinstance(precio, (int, float)):
+            # Sin precio: entra con precio 0 y la app lo muestra en "Libros sin precio",
+            # salvo que una fila anterior del mismo código sí tenga precio.
+            if c in productos:
+                continue
+            precio = 0
         productos[c] = {"codigo": c, "titulo": desc, "precio": round(float(precio), 2), "existencia": 0}
 
     ws = openpyxl.load_workbook(inv_path, data_only=True).active

@@ -6,3 +6,4 @@ Punto de venta que funciona sin internet. Se instala como app en la computadora 
 - Haz un respaldo cada semana desde la pestaña **Respaldo**.
 - `data/catalogo-inicial.js` es el catálogo con el que arranca la app, generado desde Excel con `python3 tools/importar_excel.py catalogo.xlsx inventario.xlsx data/catalogo-inicial.js`.
 - Al cambiar archivos de la app, sube la versión en `sw.js` (`peregrino-vN`) para que los equipos instalados se actualicen.
+- `vendor/xlsx.full.min.js` es SheetJS 0.18.5 (licencia Apache 2.0 en `vendor/xlsx-LICENSE`); se carga solo al usar "Cargar desde Excel".

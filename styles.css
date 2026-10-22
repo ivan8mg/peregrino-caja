@@ -42,7 +42,8 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-ui); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: .9375rem/1.45 var(--f-ui); }
+html.letra-grande { font-size: 118.75%; }
 button, input { font: inherit; color: inherit; }
 h2 { font: 600 1.1rem/1.2 var(--f-display); margin: 0; text-wrap: balance; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -230,6 +231,48 @@ input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px 
 .hist .n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 .sheet.wide { width: min(520px, 100%); max-height: calc(100% - 32px); overflow-y: auto; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Inventario: botones grandes y paneles */
+.view-title { font-size: 1.5rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; min-height: 84px;
+}
+.tile b { font: 600 1.1rem/1.2 var(--f-display); }
+.tile span { font-size: .9rem; color: var(--muted); }
+.tile:hover { border-color: var(--gold); }
+.tile.warn { border-color: var(--warn); background: var(--warn-soft); }
+.tile.warn span { color: var(--warn); font-weight: 600; }
+.aviso { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-radius: var(--r); background: var(--warn-soft); color: var(--ink); border: 1px solid var(--warn); }
+.precios { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.precios li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+.precios .pt { display: flex; flex-direction: column; min-width: 0; flex: 1 1 240px; }
+.precios .pt b { font: 500 1.05rem/1.25 var(--f-display); }
+.precios .pt span { font-size: .85rem; }
+.precios .pf { display: flex; gap: 8px; flex: 0 1 260px; }
+.precios .pf input { font-size: 1.1rem; }
+.pasos { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 18px; }
+.pasos li { display: flex; flex-direction: column; gap: 10px; }
+.pasos li::marker { font-weight: 700; color: var(--brass); }
+.pasos p { margin: 0; }
+.formato .inv-table td { white-space: nowrap; font-size: .85rem; }
+.opciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.opcion { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; background: var(--surface); }
+.opcion input { margin-top: 4px; width: 20px; height: 20px; accent-color: var(--accent); }
+.opcion span { display: flex; flex-direction: column; color: var(--muted); font-size: .9rem; }
+.opcion span b { color: var(--ink); font-size: 1rem; }
+.opcion:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.resumen { margin: 0; font-size: 1.05rem; }
+.resumen .malo, .inv-table tr.err td { color: var(--danger); }
+.big-form input[type="text"], .big-form input[type="number"] { font-size: 1.1rem; padding: 11px 12px; }
+.big-form label { font-size: .95rem; color: var(--ink); }
+.big-form details { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.big-form summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.big-form details[open] summary { margin-bottom: 8px; }
+.item .p.sinp { font: 600 .78rem var(--f-ui); color: var(--warn); text-transform: uppercase; letter-spacing: .06em; }
+.btn.letra { padding: 6px 10px; font-weight: 700; }
+.btn.letra[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
 /* Respaldo */
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 10px; }

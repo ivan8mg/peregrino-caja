@@ -27,6 +27,7 @@
       <button class="tab" data-view="mas" id="tab-mas">Respaldo</button>
     </nav>
     <span class="net" id="net" title="Todo se guarda en este equipo">Guardado en este equipo</span>
+    <button class="btn letra" id="btn-letra" type="button" aria-pressed="false" title="Letra más grande">A+</button>
   </header>
 
   <!-- VENDER -->
@@ -116,14 +117,65 @@
 
   <!-- INVENTARIO -->
   <main class="view view-inventario" id="view-inventario" hidden>
-    <div class="ventas-head">
-      <h2>Inventario</h2>
-      <div class="actions">
-        <button class="btn primary" id="btn-recibir" type="button">Recibir mercancía</button>
-        <button class="btn" id="btn-nuevo" type="button">Nuevo artículo</button>
-      </div>
+    <h2 class="view-title">Inventario</h2>
+    <div class="tiles">
+      <button class="tile" id="btn-recibir" type="button"><b>Llegó mercancía</b><span>Escanea los libros que llegaron</span></button>
+      <button class="tile" id="btn-nuevo" type="button"><b>Dar de alta un libro</b><span>Un libro nuevo, rápido</span></button>
+      <button class="tile" id="btn-excel" type="button"><b>Cargar desde Excel</b><span>Muchos libros a la vez</span></button>
+      <button class="tile" id="btn-sinprecio" type="button"><b>Libros sin precio</b><span id="sinprecio-n">Todos tienen precio</span></button>
     </div>
+    <p class="aviso" id="aviso-precio" hidden></p>
     <div class="kpis" id="inv-kpis"></div>
+
+    <section class="panel" id="panel-precios" hidden>
+      <div class="ventas-head">
+        <h2>Libros sin precio</h2>
+        <button class="link" id="btn-precios-cerrar" type="button">Cerrar</button>
+      </div>
+      <p class="muted">Escribe el precio y toca Guardar. El libro desaparece de esta lista cuando ya tiene precio.</p>
+      <ul class="precios" id="precios-lista"></ul>
+    </section>
+
+    <section class="panel" id="panel-excel" hidden>
+      <div class="ventas-head">
+        <h2>Cargar desde Excel</h2>
+        <button class="link" id="btn-excel-cerrar" type="button">Cerrar</button>
+      </div>
+      <div id="excel-pasos">
+        <ol class="pasos">
+          <li>
+            <b>Descarga el formato</b> y llénalo con una fila por libro. Si ya existe el código, se actualiza; si no, se da de alta.
+            <div class="table-wrap formato"><table class="inv-table">
+              <thead><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th></tr></thead>
+              <tbody><tr><td><b>CODIGO</b></td><td><b>TITULO</b></td><td><b>AUTOR</b></td><td><b>PRECIO</b></td><td><b>CANTIDAD</b></td><td><b>SIN DESCUENTO</b></td></tr>
+              <tr class="muted"><td>ISBN o código</td><td>Obligatorio en libros nuevos</td><td>Opcional</td><td>Solo el número</td><td>Piezas</td><td>Escribe SI, o déjalo vacío</td></tr></tbody>
+            </table></div>
+            <div class="actions"><button class="btn" id="btn-formato" type="button">Descargar formato vacío</button><button class="btn" id="btn-export-inv" type="button">Descargar mi inventario en Excel</button></div>
+            <p class="muted">Una celda vacía no cambia nada: por ejemplo, si dejas vacío el precio de un libro que ya existe, conserva el que tenía.</p>
+          </li>
+          <li>
+            <b>¿Qué significa la cantidad?</b>
+            <div class="opciones">
+              <label class="opcion"><input type="radio" name="excel-modo" id="modo-sumar" value="sumar" checked> <span><b>Llegó mercancía</b> Se suma a lo que ya hay.</span></label>
+              <label class="opcion"><input type="radio" name="excel-modo" id="modo-reemplazar" value="reemplazar"> <span><b>Hice un conteo</b> La cantidad del archivo queda como la existencia.</span></label>
+            </div>
+          </li>
+          <li>
+            <b>Sube el archivo.</b> Te muestro lo que va a cambiar antes de guardar.
+            <div class="actions"><label class="btn primary" for="file-excel">Elegir archivo de Excel</label><input id="file-excel" type="file" accept=".xlsx,.xls,.csv" hidden></div>
+          </li>
+        </ol>
+      </div>
+      <div id="excel-revision" hidden>
+        <p class="resumen" id="excel-resumen"></p>
+        <div class="table-wrap"><table class="inv-table">
+          <thead><tr><th>Fila</th><th>Artículo</th><th>Qué pasa</th></tr></thead>
+          <tbody id="excel-filas"></tbody>
+        </table></div>
+        <div class="actions"><button class="btn primary" id="btn-excel-aplicar" type="button">Guardar cambios</button><button class="btn" id="btn-excel-otro" type="button">Elegir otro archivo</button></div>
+      </div>
+      <p class="muted" id="excel-msg" role="status"></p>
+    </section>
 
     <section class="panel" id="recepcion" hidden>
       <div class="ventas-head">
@@ -148,6 +200,7 @@
         <button type="button" class="is-on" data-filtro="todos" id="f-todos">Todos</button>
         <button type="button" data-filtro="pocos" id="f-pocos">Por agotarse</button>
         <button type="button" data-filtro="cero" id="f-cero">Sin existencia</button>
+        <button type="button" data-filtro="sinprecio" id="f-sinprecio">Sin precio</button>
       </div>
     </div>
     <div class="table-wrap">
