@@ -107,6 +107,34 @@
   <!-- VENTAS -->
   <main class="view view-ventas" id="view-ventas" hidden>
     <div class="ventas-head">
+      <h2 class="view-title">Ventas</h2>
+      <div class="seg" role="group" aria-label="Periodo">
+        <button type="button" class="is-on" data-periodo="7" id="per-7">7 días</button>
+        <button type="button" data-periodo="30" id="per-30">30 días</button>
+        <button type="button" data-periodo="365" id="per-365">12 meses</button>
+      </div>
+    </div>
+    <div class="kpis" id="tab-kpis"></div>
+    <section class="panel">
+      <h2 id="top-titulo">Libros más vendidos</h2>
+      <ol class="topv" id="top-libros"></ol>
+      <p class="muted nota">"Pedir más" aparece cuando quedan igual o menos piezas de las que se vendieron en el periodo.</p>
+    </section>
+    <div class="graficas">
+      <section class="panel">
+        <h2>Ventas por semana</h2>
+        <p class="muted nota">Últimas 12 semanas, de lunes a domingo. La barra más clara es la semana en curso.</p>
+        <div class="grafica" id="graf-semana"></div>
+        <details><summary>Ver como tabla</summary><div class="table-wrap" id="tabla-semana"></div></details>
+      </section>
+      <section class="panel">
+        <h2>Ventas por mes</h2>
+        <p class="muted nota">Últimos 12 meses. La barra más clara es el mes en curso.</p>
+        <div class="grafica" id="graf-mes"></div>
+        <details><summary>Ver como tabla</summary><div class="table-wrap" id="tabla-mes"></div></details>
+      </section>
+    </div>
+    <div class="ventas-head dia-head">
       <h2>Ventas del día</h2>
       <label for="fecha" class="sr">Fecha</label>
       <input id="fecha" type="date">

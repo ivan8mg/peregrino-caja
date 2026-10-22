@@ -525,6 +525,137 @@
 
 
 
+
+  // ---------- Tablero de ventas (gráficas) ----------
+  S.periodo = 7;
+  const DIA = 86400000;
+  const inicioDia = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const inicioSemana = (d) => { const x = inicioDia(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }; // lunes
+  const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const compacto = (n) => n >= 1e6 ? `$${(n / 1e6).toFixed(1).replace(".0", "")}M` : n >= 1000 ? `$${(Math.round(n / 100) / 10).toString()}K` : `$${Math.round(n)}`;
+  const vigentes = () => S.ventas.filter((v) => v.estado !== "anulada");
+  const piezasDe = (v) => v.lineas.reduce((a, l) => a + (l.precio > 0 ? l.cantidad : 0), 0);
+
+  function resumenPeriodo(desde, hasta) {
+    const ventas = vigentes().filter((v) => { const t = new Date(v.fecha); return t >= desde && t < hasta; });
+    const total = r2(ventas.reduce((s, v) => s + v.total, 0));
+    return { ventas, total, n: ventas.length, piezas: ventas.reduce((s, v) => s + piezasDe(v), 0), ticket: ventas.length ? total / ventas.length : 0 };
+  }
+
+  function delta(actual, antes) {
+    if (!antes) return actual ? `<small class="delta">Sin ventas en el periodo anterior</small>` : `<small class="delta">&nbsp;</small>`;
+    const pct = Math.round(((actual - antes) / antes) * 100);
+    const cls = pct > 0 ? "sube" : pct < 0 ? "baja" : "";
+    return `<small class="delta ${cls}">${pct > 0 ? "▲" : pct < 0 ? "▼" : "="} ${Math.abs(pct)}% vs periodo anterior</small>`;
+  }
+
+  // Columnas verticales: una sola serie, eje en pesos, el periodo en curso se marca como parcial.
+  function columnas(el, datos, titulo) {
+    const W = Math.max(280, el.clientWidth || 600), H = 220, m = { t: 24, r: 8, b: 30, l: 48 };
+    const max = Math.max(...datos.map((d) => d.valor), 0);
+    if (!max) { el.innerHTML = `<p class="vacio">Aún no hay ventas en estas fechas.</p>`; return; }
+    const paso = Math.pow(10, Math.floor(Math.log10(max)));
+    const tope = [1, 2, 2.5, 5, 10].map((k) => k * paso).find((v) => v >= max);
+    const ticks = [0, tope / 2, tope];
+    const iw = W - m.l - m.r, ih = H - m.t - m.b, banda = iw / datos.length;
+    const bw = Math.min(24, banda - 6);
+    const y = (v) => m.t + ih - (v / tope) * ih;
+    const iMax = datos.reduce((bi, d, i) => (d.valor > datos[bi].valor ? i : bi), 0);
+    const ult = datos.length - 1;
+    const etiqueta = (i) => (ult - i) % 2 === 0;
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${esc(titulo)}">`;
+    for (const t of ticks) s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/><text class="eje" x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end">${compacto(t)}</text>`;
+    datos.forEach((d, i) => {
+      const cx = m.l + banda * i + banda / 2, x = cx - bw / 2, h = Math.max(d.valor ? 2 : 0, (d.valor / tope) * ih), top = m.t + ih - h, r = Math.min(4, h);
+      const path = h ? `M${x},${m.t + ih}V${top + r}Q${x},${top} ${x + r},${top}H${x + bw - r}Q${x + bw},${top} ${x + bw},${top + r}V${m.t + ih}Z` : "";
+      s += `<g class="col${d.parcial ? " parcial" : ""}" data-i="${i}" tabindex="0" aria-label="${esc(d.nombre)}: ${money(d.valor)}, ${d.n} ventas">
+        <rect class="hit" x="${m.l + banda * i}" y="${m.t}" width="${banda}" height="${ih + m.b}"/>${path ? `<path d="${path}"/>` : ""}</g>`;
+      if (etiqueta(i)) s += `<text class="eje" x="${cx}" y="${H - 10}" text-anchor="middle">${esc(d.corto)}</text>`;
+      if ((i === iMax || i === ult) && d.valor) s += `<text class="val" x="${cx}" y="${top - 6}" text-anchor="middle">${compacto(d.valor)}</text>`;
+    });
+    s += `<line class="base" x1="${m.l}" x2="${W - m.r}" y1="${m.t + ih}" y2="${m.t + ih}"/></svg>`;
+    el.innerHTML = s + `<div class="tip" hidden></div>`;
+    const tip = el.querySelector(".tip");
+    const mostrar = (g) => {
+      const d = datos[g.dataset.i];
+      tip.innerHTML = `<b>${esc(d.nombre)}</b>${money(d.valor)}<span>${d.n} ${d.n === 1 ? "venta" : "ventas"} · ${d.piezas} libros${d.parcial ? " · en curso" : ""}</span>`;
+      tip.hidden = false;
+      const box = g.getBoundingClientRect(), cont = el.getBoundingClientRect();
+      tip.style.left = Math.min(cont.width - tip.offsetWidth, Math.max(0, box.left - cont.left + box.width / 2 - tip.offsetWidth / 2)) + "px";
+      el.querySelectorAll(".col").forEach((c) => c.classList.toggle("on", c === g));
+    };
+    const ocultar = () => { tip.hidden = true; el.querySelectorAll(".col").forEach((c) => c.classList.remove("on")); };
+    el.querySelectorAll(".col").forEach((g) => {
+      g.addEventListener("pointerenter", () => mostrar(g));
+      g.addEventListener("click", () => mostrar(g));
+      g.addEventListener("focus", () => mostrar(g));
+      g.addEventListener("blur", ocultar);
+    });
+    el.querySelector("svg").addEventListener("pointerleave", ocultar);
+  }
+
+  function tablaDatos(datos) {
+    return `<table class="mini"><thead><tr><th>Periodo</th><th class="n">Ventas</th><th class="n">Libros</th><th class="n">Vendido</th></tr></thead><tbody>${
+      [...datos].reverse().map((d) => `<tr><td>${esc(d.nombre)}${d.parcial ? " <span class=\"muted\">(en curso)</span>" : ""}</td><td class="n">${d.n}</td><td class="n">${d.piezas}</td><td class="n">${money(d.valor)}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  function serie(inicios, fin, nombre, corto) {
+    return inicios.map((ini, i) => {
+      const r = resumenPeriodo(ini, inicios[i + 1] || fin);
+      return { nombre: nombre(ini), corto: corto(ini), valor: r.total, n: r.n, piezas: r.piezas, parcial: i === inicios.length - 1 };
+    });
+  }
+
+  function renderTablero() {
+    const hoy = new Date();
+    const finHoy = new Date(inicioDia(hoy).getTime() + DIA);
+    const dias = S.periodo;
+    const desde = new Date(finHoy.getTime() - dias * DIA), antes = new Date(desde.getTime() - dias * DIA);
+    const act = resumenPeriodo(desde, finHoy), prev = resumenPeriodo(antes, desde);
+    $("#tab-kpis").innerHTML = `
+      <div class="kpi"><span>Vendido</span><strong>${money(act.total)}</strong>${delta(act.total, prev.total)}</div>
+      <div class="kpi"><span>Número de ventas</span><strong>${act.n.toLocaleString("es-MX")}</strong>${delta(act.n, prev.n)}</div>
+      <div class="kpi"><span>Ticket promedio</span><strong>${money(act.ticket)}</strong>${delta(act.ticket, prev.ticket)}</div>
+      <div class="kpi"><span>Libros vendidos</span><strong>${act.piezas.toLocaleString("es-MX")}</strong>${delta(act.piezas, prev.piezas)}</div>`;
+
+    // Semanas (12) y meses (12), incluyendo el actual.
+    const sem0 = inicioSemana(hoy);
+    const semanas = Array.from({ length: 12 }, (_, i) => new Date(sem0.getFullYear(), sem0.getMonth(), sem0.getDate() - 7 * (11 - i)));
+    const dSem = serie(semanas, finHoy,
+      (d) => `Semana del ${d.getDate()} ${MESES[d.getMonth()]}`, (d) => `${d.getDate()} ${MESES[d.getMonth()]}`);
+    const meses = Array.from({ length: 12 }, (_, i) => new Date(hoy.getFullYear(), hoy.getMonth() - (11 - i), 1));
+    const dMes = serie(meses, finHoy,
+      (d) => `${MESES[d.getMonth()][0].toUpperCase() + MESES[d.getMonth()].slice(1)} ${d.getFullYear()}`, (d) => MESES[d.getMonth()]);
+    columnas($("#graf-semana"), dSem, "Ventas por semana, últimas 12 semanas");
+    columnas($("#graf-mes"), dMes, "Ventas por mes, últimos 12 meses");
+    $("#tabla-semana").innerHTML = tablaDatos(dSem);
+    $("#tabla-mes").innerHTML = tablaDatos(dMes);
+
+    // Más vendidos del periodo: piezas, importe y si conviene volver a pedir.
+    const cuenta = new Map();
+    for (const v of act.ventas) for (const l of v.lineas) {
+      if (!(l.precio > 0)) continue;
+      const c = cuenta.get(l.codigo) || { codigo: l.codigo, titulo: l.titulo, piezas: 0, importe: 0 };
+      c.piezas += l.cantidad; c.importe += l.importe;
+      cuenta.set(l.codigo, c);
+    }
+    const top = [...cuenta.values()].sort((a, b) => b.piezas - a.piezas || b.importe - a.importe).slice(0, 10);
+    const maxP = top[0]?.piezas || 1;
+    $("#top-titulo").textContent = `Libros más vendidos · ${({ 7: "últimos 7 días", 30: "últimos 30 días", 365: "últimos 12 meses" })[dias]}`;
+    $("#top-libros").innerHTML = top.length ? top.map((c, i) => {
+      const p = S.porCodigo.get(c.codigo);
+      const quedan = p ? p.existencia : null;
+      const pedir = quedan !== null && quedan <= c.piezas;
+      return `<li>
+        <span class="rank">${i + 1}</span>
+        <div class="tb"><div class="tt">${esc(p ? p.titulo : c.titulo)}</div>
+          <div class="barra" aria-hidden="true"><i style="width:${Math.max(3, (c.piezas / maxP) * 100)}%"></i></div></div>
+        <div class="tn"><b>${c.piezas}</b> ${c.piezas === 1 ? "pieza" : "piezas"}<span>${money(c.importe)}</span></div>
+        <div class="te">${quedan === null ? "" : pedir ? `<span class="chip warn">Pedir más · quedan ${quedan}</span>` : `<span class="chip">Quedan ${quedan}</span>`}</div>
+      </li>`;
+    }).join("") : `<li class="vacio">Aún no hay ventas en este periodo.</li>`;
+  }
+
   // ---------- Inventario ----------
   S.invFiltro = "todos";
   S.rec = []; // recepción de mercancía: { codigo, titulo, cantidad }
@@ -1074,7 +1205,7 @@
       syncError = "";
       ok = true;
       render();
-      if (!$("#view-ventas").hidden) renderVentas();
+      if (!$("#view-ventas").hidden) { renderTablero(); renderVentas(); }
       if (!$("#view-inventario").hidden) renderInventario();
       if (manual) toast("Sincronizado con Google Sheets");
     } catch (e) {
@@ -1149,7 +1280,7 @@
       $(`#view-${n}`).hidden = n !== v;
       $(`#tab-${n}`).classList.toggle("is-active", n === v);
     }
-    if (v === "ventas") renderVentas();
+    if (v === "ventas") { renderTablero(); renderVentas(); }
     if (v === "inventario") renderInventario();
     if (v === "mas") { renderMas(); renderSyncPanel(); }
     if (v === "vender" && !isMobile()) $("#q").focus();
@@ -1218,6 +1349,13 @@
 
     document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => vista(t.dataset.view)));
     $("#fecha").addEventListener("change", renderVentas);
+    document.querySelectorAll("[data-periodo]").forEach((b) => b.addEventListener("click", () => {
+      S.periodo = Number(b.dataset.periodo);
+      document.querySelectorAll("[data-periodo]").forEach((x) => x.classList.toggle("is-on", x === b));
+      renderTablero();
+    }));
+    let rz;
+    addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (!$("#view-ventas").hidden) renderTablero(); }, 200); });
     $("#sales").addEventListener("click", (e) => {
       const an = e.target.closest("[data-anular]");
       if (an) { anular(S.ventas.find((v) => v.id === an.dataset.anular), an.closest(".acts")); return; }
